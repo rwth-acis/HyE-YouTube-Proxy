@@ -3,13 +3,16 @@ package i5.las2peer.services.hyeYouTubeProxy;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.util.Arrays;
-import java.util.logging.Logger;
+import java.util.HashMap;
 
 import javax.ws.rs.*;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 
-import com.fasterxml.jackson.core.JsonFactory;
+import com.google.api.client.googleapis.auth.oauth2.GoogleAuthorizationCodeFlow;
+import com.google.api.client.http.*;
+import com.google.auth.http.HttpCredentialsAdapter;
+import com.google.auth.oauth2.GoogleCredentials;
 import i5.las2peer.api.Context;
 import i5.las2peer.logging.L2pLogger;
 import i5.las2peer.api.ManualDeployment;
@@ -17,6 +20,7 @@ import i5.las2peer.api.security.UserAgent;
 import i5.las2peer.restMapper.RESTService;
 import i5.las2peer.restMapper.annotations.ServicePath;
 
+import i5.las2peer.services.hyeYouTubeProxy.util.TokenWrapper;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import io.swagger.annotations.ApiResponse;
@@ -25,14 +29,17 @@ import io.swagger.annotations.Contact;
 import io.swagger.annotations.Info;
 import io.swagger.annotations.License;
 import io.swagger.annotations.SwaggerDefinition;
-import io.swagger.util.Json;
 
 import com.google.api.client.auth.oauth2.*;
 import com.google.api.client.googleapis.auth.oauth2.GoogleAuthorizationCodeFlow.Builder;
 import com.google.api.client.googleapis.auth.oauth2.GoogleTokenResponse;
 import com.google.api.client.http.apache.v2.ApacheHttpTransport;
 import com.google.api.client.json.gson.GsonFactory;
-import com.google.api.services.youtube.model.*;
+import com.google.api.services.youtube.YouTube;
+import com.google.api.services.youtube.YouTube.*;
+import com.google.api.services.youtube.YouTubeRequest;
+
+import i5.las2peer.services.hyeYouTubeProxy.util.ErrorCodes;
 
 /**
  * HyE - YouTube Proxy
@@ -56,24 +63,37 @@ import com.google.api.services.youtube.model.*;
 				license = @License(
 						name = "your software license name",
 						url = "http://your-software-license-url.com")))
+
 @ManualDeployment
 @ServicePath("/youtube")
-
 public class YouTubeProxy extends RESTService {
 
 	private String clientId;
 	private String clientSecret;
-	private final String ROOT_URI = "http://localhost:8080/youtube/";
-	private final String AUTH_URI = ROOT_URI + "auth";
-	private final String REDIRECT_URI = "mymdb.org";
+	private final String ROOT_URI = "http://localhost:8080/youtube";
+	private final String LOGIN_URI = ROOT_URI + "/login";
+	private final String AUTH_URI = ROOT_URI + "/auth";
 	private static final L2pLogger log = L2pLogger.getInstance(YouTubeProxy.class.getName());
-	AuthorizationCodeFlow flow;
+	private AuthorizationCodeFlow flow;
+	private YouTube ytConnection;
+	private HttpTransport transport;
+	private GsonFactory json;
+	// Store access token in frontend instead
+	// private HashMap<String, String> tokens;
 
+	/**
+	 * Class constructor, initializes member variables
+	 */
+	HttpRequestInitializer httpRequestInitializer;
 	public YouTubeProxy() {
 		setFieldValues();
-		log.info("Using client id " + this.clientId + " and secret " + this.clientSecret);
-		flow = new Builder(new ApacheHttpTransport(), new GsonFactory(), this.clientId, this.clientSecret,
-				Arrays.asList("https://www.googleapis.com/auth/youtube")).build();
+		// Access token is stored by user
+		// tokens = new HashMap<String, String>();
+		log.info("Using client id " + clientId + " and secret " + clientSecret);
+		transport = new ApacheHttpTransport();
+		json = new GsonFactory();
+		flow = new GoogleAuthorizationCodeFlow.Builder(transport, json, this.clientId, this.clientSecret,
+				Arrays.asList("https://www.googleapis.com/auth/youtube")).setAccessType("offline").build();
 	}
 
 	/**
@@ -82,80 +102,194 @@ public class YouTubeProxy extends RESTService {
 	 * @param user The User Agent whose YouTube ID we are interested in
 	 * @return The YouTube ID linked to the given user
 	 */
-
 	private String getUserId(UserAgent user) {
-		// TODO isolate sub from user agent or something like that
-		return "1234";
-	}
-
-	private String getYouTubeId(UserAgent user) {
-		// TODO implement using private las2peer storage
-		return "1234";
+		return user.getLoginName();
 	}
 
 	/**
-	 * Main page showing some YouTube data
+	 * Helper function to retrieve an authorization code for the given user
 	 *
-	 * @return Some YouTube data
+	 * @param user A las2peer user agent
+	 * @return Either a valid authorization code belonging to that user or an appropriate error message
+	 */
+	private String getAuthCode(UserAgent user) {
+		// TODO implement auth code storage
+		return null;
+	}
+
+	/**
+	 * Helper function to store the given authorization code for the given user
+	 *
+	 * @param user A las2peer user agent
+	 * @param code A Google Authorization code
+	 */
+	private void storeAuthCode(UserAgent user, String code) {
+		// TODO implement auth code storage
+		log.info("Authorization code updated for user " + getUserId(user));
+	}
+
+	/**
+	 * Helper function to retrieve an access token with the given authorization code
+	 *
+	 * @param code A Google OAuth authorization code
+	 * @return Either a valid access token or an appropriate error message
+	 */
+	private TokenResponse getAccessToken(String code) {
+		TokenResponse token;
+		log.info("Sending token request");
+
+		try {
+			token = flow.newTokenRequest(code).setRedirectUri(AUTH_URI).execute();
+		} catch (Exception e) {
+			//TODO improve error handling
+			log.printStackTrace(e);
+			return null;
+		}
+		return token;
+	}
+
+	/**
+	 * Main page showing some generally interesting YouTube videos
+	 *
+	 * @return Personalized YouTube recommendations
 	 */
 	@GET
 	@Path("/")
 	@Produces(MediaType.TEXT_PLAIN)
 	@ApiOperation(
 			value = "YouTube",
-			notes = "Returns YouTube data")
+			notes = "Returns YouTube main page")
 	@ApiResponses(
 			value = { @ApiResponse(
 					code = HttpURLConnection.HTTP_OK,
-					message = "Hello") })
-	public Response getYouTubeData() {
-		//TODO implement something
-		UserAgent user = (UserAgent) Context.getCurrent().getMainAgent();
-		return Response.ok().entity(user.getLoginName()).build();
+					message = "OK") })
+	public Response getMainPage(@DefaultValue("") @QueryParam("code") String code) {
+		// Check for access token of current user in memory
+		UserAgent user;
+		try {
+			user = (UserAgent) Context.getCurrent().getMainAgent();
+
+			// TODO improve error handling
+		} catch (Exception e) {
+			log.printStackTrace(e);
+			return Response.serverError().entity("Unable to get user agent. Are you logged in?").build();
+		}
+
+		Credential credential;
+		try {
+			credential = flow.loadCredential(getUserId(user));
+
+
+			// TODO improve error handling
+		} catch (Exception e) {
+			log.printStackTrace(e);
+			return Response.status(500).entity("Authentication failed").build();
+		}
+
+		if (credential == null) {
+			return Response.status(401).entity("No valid access token for user.").build();
+		}
+
+		String response = "OK";
+		try {
+			ytConnection = new YouTube.Builder(transport, json, credential).setApplicationName("How's your Experience")
+					.build();
+			HttpRequest request = ytConnection.search().list("snippet").setType("video").buildHttpRequest();
+			log.info("Sending request " + request.toString());
+			response = request.execute().parseAsString();
+
+			// TODO improve error handling
+		} catch (Exception e) {
+			log.printStackTrace(e);
+			return Response.status(500).entity("Unspecified server error").build();
+		}
+		return Response.ok().entity(response).build();
 	}
 
 	/**
-	 * Login function used to obtain access tokens or perform OAuth login.
-	 * 
-	 * @return A valid YouTube API Access Token or redirect to YouTube login.
+	 * Main page showing some generally interesting YouTube videos
+	 *
+	 * @return Personalized YouTube recommendations
+	 */
+	@POST
+	@Path("/")
+	@Consumes(MediaType.APPLICATION_JSON)
+	@Produces(MediaType.TEXT_PLAIN)
+	@ApiOperation(
+			value = "YouTube",
+			notes = "Returns YouTube main page")
+	@ApiResponses(
+			value = { @ApiResponse(
+					code = HttpURLConnection.HTTP_OK,
+					message = "OK") })
+	public Response getMainPage(TokenWrapper token) {
+		// Check for access token of current user in memory
+		UserAgent user;
+		try {
+			user = (UserAgent) Context.getCurrent().getMainAgent();
+
+			// TODO improve error handling
+		} catch (Exception e) {
+			log.printStackTrace(e);
+			return Response.serverError().entity("Unable to get user agent. Are you logged in?").build();
+		}
+
+		Credential credential;
+		try {
+			credential = new Credential.Builder(BearerToken.authorizationHeaderAccessMethod()).setJsonFactory(json)
+					.setTransport(transport)//.setClientAuthentication().setTokenServerUrl(new GenericUrl(""))
+					.build().setFromTokenResponse(token.googleToken());
+
+			// TODO improve error handling
+		} catch (Exception e) {
+			log.printStackTrace(e);
+			return Response.status(401).entity("Invalid access token " + token.toString()).build();
+		}
+
+		String response = "OK";
+		try {
+			ytConnection = new YouTube.Builder(transport, json, credential).setApplicationName("How's your Experience")
+					.build();
+			HttpRequest request = ytConnection.search().list("snippet").setType("video").buildHttpRequest();
+			log.info("Sending request " + request.toString());
+			response = request.execute().parseAsString();
+
+			// TODO improve error handling
+		} catch (Exception e) {
+			log.printStackTrace(e);
+			return Response.status(500).entity("Unspecified server error").build();
+		}
+		return Response.ok().entity(response).build();
+	}
+
+	/**
+	 * Login function used to perform OAuth login.
+	 *
+	 * @return A redirect to a Google OAuth page
 	 */
 	@GET
 	@Path("/login")
 	@Produces(MediaType.TEXT_PLAIN)
 	@ApiOperation(
 			value = "YouTube - Login",
-			notes = "Performs an OAuth login to Google")
+			notes = "Sends user to Google login page")
 	@ApiResponses(
 			value = { @ApiResponse(
 					code = HttpURLConnection.HTTP_OK,
-					message = "Got token") })
-	public Response getAccessToken() {
+					message = "OK") })
+	public Response login() {
 		UserAgent user = (UserAgent) Context.getCurrent().getMainAgent();
-		Credential creds = null;
-		try {
-			creds = flow.loadCredential(getYouTubeId(user));
-
-			//TODO improve error handling
-		} catch (Exception e) {
-			log.severe(e.toString());
-		}
-
-		if (creds == null) {
-			String redirectUrl = flow.newAuthorizationUrl().setRedirectUri(AUTH_URI).build();
-			log.info("Redirecting to " + redirectUrl);
-			return Response.temporaryRedirect(URI.create(redirectUrl)).build();
-		} else {
-			// TODO check if token is still valid before returning
-			log.info("Got access token " + creds.getAccessToken());
-			return Response.ok().entity(creds.getAccessToken()).build();
-		}
+		String redirectUrl = flow.newAuthorizationUrl().setRedirectUri(AUTH_URI).build();
+		log.info("Redirecting user " + getUserId(user) + " to " + redirectUrl);
+		return Response.temporaryRedirect(URI.create(redirectUrl)).build();
 	}
 
 	/**
-	 * Auth function used to handle YouTube OAuth logins.
+	 * Authentication function used to handle YouTube OAuth logins.
+	 * TODO Since the auth code is sent as get parameter it is written to the server log, which is kind of a privacy breach
 	 *
 	 * @param code The authentication code returned by Google.
-	 * @return A valid YouTube API Access Token.
+	 * @return A valid YouTube API Access Token
 	 */
 	@GET
 	@Path("/auth")
@@ -166,41 +300,45 @@ public class YouTubeProxy extends RESTService {
 	@ApiResponses(
 			value = { @ApiResponse(
 					code = HttpURLConnection.HTTP_OK,
-					message = "Got token") })
-	public Response handleLogin(@DefaultValue("") @QueryParam("code") String code) {
-		UserAgent user = (UserAgent) Context.getCurrent().getMainAgent();
-		try {
-			log.info("Sending token request");
-			GoogleTokenResponse token = (GoogleTokenResponse) flow.newTokenRequest(code).setRedirectUri(ROOT_URI)
-					.execute();
-			log.info("Storing token " + token.getIdToken());
-			Credential creds = flow.createAndStoreCredential(token, getUserId(user));
-			return Response.ok().entity(creds.getAccessToken()).build();
-
-			// TODO imporve error handling
-		} catch (Exception e) {
-			log.severe(e.toString());
-			return Response.serverError().build();
+					message = "OK") })
+	public Response auth(@DefaultValue("") @QueryParam("code") String code) {
+		// Test authorization code
+		TokenResponse token = getAccessToken(code);
+		if (token == null) {
+			return Response.serverError().entity("Could not get access token with authorization code " + code).build();
 		}
-	}
 
-	/**
-	 * Function to finish login.
-	 *
-	 * @return Nothing much
-	 */
-	@GET
-	@Path("/token")
-	@Produces(MediaType.TEXT_PLAIN)
-	@ApiOperation(
-			value = "YouTube - Finished",
-			notes = "YouTube login finished")
-	@ApiResponses(
-			value = { @ApiResponse(
-					code = HttpURLConnection.HTTP_OK,
-					message = "Login successful") })
-	public Response handleToken() {
-		return Response.ok().build();
+		// Store authorization code
+		UserAgent user = (UserAgent) Context.getCurrent().getMainAgent();
+		storeAuthCode(user, code);
+		Credential credential = null;
+		try {
+			credential = flow.createAndStoreCredential(token, getUserId(user));
+
+			// TODO improve error handling
+		} catch (Exception e) {
+			log.printStackTrace(e);
+		}
+
+
+		// Currently, just here for testing
+		// ***********************************
+		try {
+			ytConnection = new YouTube.Builder(transport, json, credential).setApplicationName("How's your Experience")
+					.build();
+			HttpRequest request = ytConnection.search().list("snippet").setType("video").buildHttpRequest();
+			log.info("Sending request " + request.toString());
+			String response = request.execute().parseAsString();
+			log.info(response);
+
+			// TODO improve error handling
+		} catch (Exception e) {
+			log.printStackTrace(e);
+			return Response.status(500).entity("Unspecified server error").build();
+		}
+		// ***********************************
+
+		return Response.ok().entity(new TokenWrapper(credential).toString()).build();
 	}
 
 	/**
