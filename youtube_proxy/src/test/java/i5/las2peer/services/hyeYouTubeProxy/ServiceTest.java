@@ -97,9 +97,9 @@ public class ServiceTest {
 				client.setConnectorEndpoint(connector.getHttpEndpoint());
 				client.setLogin(testAgent.getIdentifier(), testPass);
 				
-				ClientResponse result = client.sendRequest("GET", mainPath + "get", "");
+				ClientResponse result = client.sendRequest("GET", mainPath, "");
 				Assert.assertEquals(200, result.getHttpCode());
-				Assert.assertEquals("adam", result.getResponse().trim());// YOUR RESULT VALUE HERE
+				Assert.assertEquals("OK", result.getResponse().trim());// YOUR RESULT VALUE HERE
 				System.out.println("Result of 'testGet': " + result.getResponse().trim());
 			} catch (Exception e) {
 				e.printStackTrace();
