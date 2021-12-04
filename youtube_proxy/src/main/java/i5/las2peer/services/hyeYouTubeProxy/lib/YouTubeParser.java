@@ -155,6 +155,39 @@ public abstract class YouTubeParser {
     }
 
     /**
+     * YouTube's HTML response mainly consists of JavaScript which loads the content,
+     * this function tries to extract the displayed recommendations from this JS code.
+     *
+     * @param html the HTML of YouTube results page
+     * @return Personalized YouTube search results
+     */
+    private static ArrayList<Recommendation> getRecsFromResultsJS(String html) {
+        ArrayList<Recommendation> recs = new ArrayList<Recommendation>();
+        final String mainObjKey = "twoColumnSearchResultsRenderer";
+
+        JsonObject mainObj = getMainObject(html, mainObjKey);
+        if (mainObj == null) {
+            log.info("Unable to find " + mainObjKey + " in given HTML");
+            return recs;
+        }
+
+        JsonArray contents;
+        try {
+            contents = mainObj.get("primaryContents").getAsJsonObject().get("sectionListRenderer").getAsJsonObject()
+                    .get("contents").getAsJsonArray().get(0).getAsJsonObject().get("itemSectionRenderer")
+                    .getAsJsonObject().get("contents").getAsJsonArray();
+
+        } catch (Exception e) {
+            log.printStackTrace(e);
+            return recs;
+        }
+
+        // Get recommendation data from array
+        recs = parseRecsFromContents(contents);
+        return recs;
+    }
+
+    /**
      * Parses the given HTML and extracts YouTube video recommendations
      *
      * @param html the HTML of YouTube's main page
@@ -213,6 +246,38 @@ public abstract class YouTubeParser {
         // If no recommendations were found, try another way
         if (recs.isEmpty())
             return getRecsFromAsideJS(html);
+        else
+            return recs;
+    }
+
+    /**
+     * Parses the given HTML and extracts YouTube video recommendations
+     *
+     * @param html the HTML of YouTube search results page
+     * @return Personalized YouTube search results
+     */
+    public static ArrayList<Recommendation> resultsPage(String html) {
+        ArrayList<Recommendation> recs = new ArrayList<Recommendation>();
+        Document doc = Jsoup.parse(html);
+        Element body = doc.body();
+        Elements thumbnails = body.getElementsByTag(THUMBNAIL_TAG);
+        Iterator<Element> it = thumbnails.iterator();
+        while (it.hasNext()) {
+            Element recommendation = it.next().parent();
+            Elements imgs = recommendation.getElementsByTag(IMAGE_TAG);
+            Elements links = recommendation.getElementsByTag(LINK_TAG);
+            Elements metaBlock = recommendation.getElementsByTag(METADATA_CLASS);
+
+            Recommendation rec = RecommendationBuilder.build(imgs, links, metaBlock);
+            if (rec == null)
+                log.info("Error creating recommendation object from HTML data");
+            else
+                recs.add(rec);
+        }
+
+        // If no recommendations were found, try another way
+        if (recs.isEmpty())
+            return getRecsFromResultsJS(html);
         else
             return recs;
     }

@@ -155,28 +155,29 @@ public abstract class RecommendationBuilder {
     public static Recommendation build(Elements links, Elements imgs, Elements metaBlock) {
         Recommendation rec;
         if (metaBlock.size() < 1) {
-            log.info("Not enough meta elements to build Recommendation");
+            log.info("Not enough meta elements to build Recommendation (" + metaBlock.size() + "/1)");
             return null;
         }
         if (imgs.size() < 2) {
-            log.info("Not enough image elements to build Recommendation");
+            log.info("Not enough image elements to build Recommendation (" + imgs.size() + "/2)");
             return null;
         }
         if (links.size() < 4) {
-            log.info("Not enough link elements to build Recommendation");
+            log.info("Not enough link elements to build Recommendation (" + links.size() + "/4)");
             return null;
         }
         try {
             rec = new Recommendation(
-                    links.get(2).attr(TITLE_KEY),
-                    links.get(3).text(),
+                    links.get(1).attr(TITLE_KEY),
+                    links.get(2).text(),
                     links.get(0).attr(LINK_KEY),
-                    links.get(3).attr(LINK_KEY),
-                    imgs.get(0).attr(SOURCE_KEY),
-                    imgs.get(1).attr(SOURCE_KEY),
-                    getViews(metaBlock.get(0).text()),
-                    getUploaded(metaBlock.get(0).text())
-            );
+                    links.get(2).attr(LINK_KEY));
+            rec.setThumbnail(imgs.get(0).attr(SOURCE_KEY));
+            rec.setAvatar(imgs.get(1).attr(SOURCE_KEY));
+            if (links.size() >= 5)
+                rec.setDescription(links.get(5).text());
+            rec.setViews(getViews(metaBlock.get(0).text()));
+            rec.setUploaded(getUploaded(metaBlock.get(0).text()));
         } catch (Exception e) {
             log.printStackTrace(e);
             return null;
@@ -189,11 +190,11 @@ public abstract class RecommendationBuilder {
     public static Recommendation build(Elements links, Elements imgs) {
         Recommendation rec;
         if (imgs.size() < 2) {
-            log.info("Not enough image elements to build Recommendation");
+            log.info("Not enough image elements to build Recommendation (" + imgs.size() + "/2)");
             return null;
         }
         if (links.size() < 4) {
-            log.info("Not enough link elements to build recommendation");
+            log.info("Not enough link elements to build recommendation (" + links.size() + "/4)");
             return null;
         }
         try {
@@ -212,7 +213,8 @@ public abstract class RecommendationBuilder {
                     imgs.get(0).attr(SOURCE_KEY),
                     "",
                     videoDetails.get("views").toString(),
-                    videoDetails.get("uploaded").toString()
+                    videoDetails.get("uploaded").toString(),
+                    ""
             );
         } catch (Exception e) {
             log.printStackTrace(e);
@@ -226,12 +228,13 @@ public abstract class RecommendationBuilder {
     public static Recommendation build(JsonObject obj) {
         Recommendation rec = null;
 
-        // There are two different types of recommendation objects
+        // There are three different types of recommendation objects
         if (obj.has("richItemRenderer")) {
             try {
                 // Actually interesting data is buried a little deeper
                 obj = obj.get("richItemRenderer").getAsJsonObject().get("content").getAsJsonObject()
                     .get("videoRenderer").getAsJsonObject();
+                System.out.println(obj.toString());
 
                 // Try to create object
                 rec = new Recommendation(
@@ -244,11 +247,16 @@ public abstract class RecommendationBuilder {
                         obj.get("ownerText").getAsJsonObject().get("runs").getAsJsonArray().get(0).getAsJsonObject()
                                 .get("navigationEndpoint").getAsJsonObject().get("browseEndpoint").getAsJsonObject()
                                 .get("canonicalBaseUrl").getAsString(),
-                        obj.get("thumbnail").getAsJsonObject().get("thumbnails").getAsJsonArray().get(0).getAsJsonObject()
+                        obj.get("thumbnail").getAsJsonObject().get("thumbnails").getAsJsonArray().get(0)
+                                .getAsJsonObject().get("url").getAsString(),
+                        obj.get("channelThumbnailSupportedRenderers").getAsJsonObject()
+                                .get("channelThumbnailWithLinkRenderer").getAsJsonObject().get("thumbnail")
+                                .getAsJsonObject().get("thumbnails").getAsJsonArray().get(0).getAsJsonObject()
                                 .get("url").getAsString(),
-                        "",
                         obj.get("viewCountText").getAsJsonObject().get("simpleText").getAsString(),
-                        obj.get("publishedTimeText").getAsJsonObject().get("simpleText").getAsString()
+                        obj.get("publishedTimeText").getAsJsonObject().get("simpleText").getAsString(),
+                        obj.get("descriptionSnippet").getAsJsonObject().get("runs").getAsJsonArray().get(0)
+                                .getAsJsonObject().get("text").getAsString()
                 );
             } catch (Exception e) {
                 log.printStackTrace(e);
@@ -257,6 +265,7 @@ public abstract class RecommendationBuilder {
         else if (obj.has("compactVideoRenderer")) {
             try {
                 obj = obj.get("compactVideoRenderer").getAsJsonObject();
+                System.out.println(obj.toString());
 
                 // Try to create object
                 rec = new Recommendation(
@@ -268,12 +277,44 @@ public abstract class RecommendationBuilder {
                         obj.get("shortBylineText").getAsJsonObject().get("runs").getAsJsonArray().get(0)
                                 .getAsJsonObject().get("navigationEndpoint").getAsJsonObject().get("browseEndpoint")
                                 .getAsJsonObject().get("canonicalBaseUrl").getAsString(),
-                        obj.get("thumbnail").getAsJsonObject().get("thumbnails").getAsJsonArray().get(0).getAsJsonObject()
-                                .get("url").getAsString(),
+                        obj.get("thumbnail").getAsJsonObject().get("thumbnails").getAsJsonArray().get(0)
+                                .getAsJsonObject().get("url").getAsString(),
                         obj.get("channelThumbnail").getAsJsonObject().get("thumbnails").getAsJsonArray().get(0)
                                 .getAsJsonObject().get("url").getAsString(),
                         obj.get("viewCountText").getAsJsonObject().get("simpleText").getAsString(),
-                        obj.get("publishedTimeText").getAsJsonObject().get("simpleText").getAsString()
+                        obj.get("publishedTimeText").getAsJsonObject().get("simpleText").getAsString(),
+                        ""
+                );
+            } catch (Exception e) {
+                log.printStackTrace(e);
+            }
+        }
+        else if (obj.has("videoRenderer")) {
+            try {
+                obj = obj.get("videoRenderer").getAsJsonObject();
+
+                // Try to create object
+                rec = new Recommendation(
+                        obj.get("title").getAsJsonObject().get("runs").getAsJsonArray().get(0).getAsJsonObject()
+                                .get("text").getAsString(),
+                        obj.get("ownerText").getAsJsonObject().get("runs").getAsJsonArray().get(0).getAsJsonObject()
+                                .get("text").getAsString(),
+                        obj.get("navigationEndpoint").getAsJsonObject().get("commandMetadata").getAsJsonObject()
+                                .get("webCommandMetadata").getAsJsonObject().get("url").getAsString(),
+                        obj.get("ownerText").getAsJsonObject().get("runs").getAsJsonArray().get(0).getAsJsonObject()
+                                .get("navigationEndpoint").getAsJsonObject().get("browseEndpoint").getAsJsonObject()
+                                .get("canonicalBaseUrl").getAsString(),
+                        obj.get("thumbnail").getAsJsonObject().get("thumbnails").getAsJsonArray().get(0).
+                                getAsJsonObject().get("url").getAsString(),
+                        obj.get("channelThumbnailSupportedRenderers").getAsJsonObject()
+                                .get("channelThumbnailWithLinkRenderer").getAsJsonObject().get("thumbnail")
+                                .getAsJsonObject().get("thumbnails").getAsJsonArray().get(0).getAsJsonObject()
+                                .get("url").getAsString(),
+                        obj.get("viewCountText").getAsJsonObject().get("simpleText").getAsString(),
+                        obj.get("publishedTimeText").getAsJsonObject().get("simpleText").getAsString(),
+                        obj.get("detailedMetadataSnippets").getAsJsonArray().get(0).getAsJsonObject().get("snippetText")
+                                .getAsJsonObject().get("runs").getAsJsonArray().get(0).getAsJsonObject().get("text")
+                                .getAsString()
                 );
             } catch (Exception e) {
                 log.printStackTrace(e);

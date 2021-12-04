@@ -23,6 +23,8 @@ public class Recommendation {
     private String views;
     // Text describing the upload date
     private String uploaded;
+    // Video description text
+    private String description;
 
     // Constructor with necessary information
     public Recommendation(String title, String channelName, String link, String channelLink) {
@@ -34,6 +36,7 @@ public class Recommendation {
         this.avatar = "";
         this.views = "";
         this.uploaded = "";
+        this.description = "";
     }
 
     // Constructor with additional information
@@ -47,11 +50,12 @@ public class Recommendation {
         this.avatar = avatar;
         this.views = "";
         this.uploaded = "";
+        this.description = "";
     }
 
     // Constructor with all information
     public Recommendation(String title, String channelName, String link, String channelLink, String thumbnail,
-                          String avatar, String views, String uploaded) {
+                          String avatar, String views, String uploaded, String description) {
         this.title = title;
         this.channelName = channelName;
         this.link = link;
@@ -60,6 +64,7 @@ public class Recommendation {
         this.avatar = avatar;
         this.views = views;
         this.uploaded = uploaded;
+        this.description = description;
     }
 
     public String getTitle() {
@@ -124,5 +129,13 @@ public class Recommendation {
 
     public void setUploaded(String uploaded) {
         this.uploaded = uploaded;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
     }
 }

@@ -65,7 +65,8 @@ public class YouTubeProxy extends RESTService {
 
 	private final String ROOT_URI = "http://localhost:8080/youtube";
 	private final String YOUTUBE_MAIN_PAGE = "https://www.youtube.com/";
-	private final String YOUTUBE_VIDEO_PAGE = "https://www.youtube.com/watch?v=";
+	private final String YOUTUBE_VIDEO_PAGE = YOUTUBE_MAIN_PAGE + "watch?v=";
+	private final String YOUTUBE_RESULTS_PAGE = YOUTUBE_MAIN_PAGE + "results?search_query=";
 	private String debug;
 	private String cookieFile;
 	private String headerFile;
@@ -91,6 +92,10 @@ public class YouTubeProxy extends RESTService {
 
 	private String getVideoUrl(String videoId) {
 		return YOUTUBE_VIDEO_PAGE + videoId;
+	}
+
+	private String getResultsUrl(String searchQuery) {
+		return YOUTUBE_RESULTS_PAGE + searchQuery;
 	}
 
 	/**
@@ -205,6 +210,69 @@ public class YouTubeProxy extends RESTService {
 						.put("500", "Could not get recommendations for video " + videoId))).build();
 			}
 			ArrayList<Recommendation> recommendations = YouTubeParser.aside(page.content());
+			return Response.ok().entity(gson.toJson(recommendations)).build();
+		} catch (Exception e) {
+			log.printStackTrace(e);
+			return Response.serverError().entity(
+					gson.toJson(new HashMap<String, String>().put("500", "Unspecified server error"))).build();
+		}
+	}
+
+	/**
+	 * Main page showing some generally interesting YouTube videos
+	 *
+	 * @return Personalized YouTube recommendations
+	 */
+	@GET
+	@Path("/results")
+	@Produces(MediaType.APPLICATION_JSON)
+	@ApiOperation(
+			value = "YouTube",
+			notes = "Returns YouTube search results")
+	@ApiResponses(
+			value = { @ApiResponse(
+					code = HttpURLConnection.HTTP_OK,
+					message = "OK") })
+	public Response getSearchResults(@QueryParam("search_query") String searchQuery) {
+		// TODO put this somewhere more appropriate
+		if (debug.equals("true"))
+			log.setLevel(Level.ALL);
+
+		if (searchQuery.length() == 0)
+			return Response.status(400).entity(
+					gson.toJson(new HashMap<String, String>().put("400", "Missing search query"))).build();
+
+		UserAgent user;
+		try {
+			user = (UserAgent) Context.getCurrent().getMainAgent();
+		} catch (Exception e) {
+			return Response.status(401).entity(gson.toJson(
+					new HashMap<String, String>().put("401", "Could not get user agent. Are you logged in?"))).build();
+		}
+
+		BrowserContext context = browser.newContext();
+
+		try {
+			context.addCookies(idm.getCookies(user));
+			context.setExtraHTTPHeaders(idm.getHeaders(user));
+		} catch (Exception e) {
+			log.printStackTrace(e);
+			return Response.serverError().entity(
+					gson.toJson(new HashMap<String, String>().put("500", "Error setting request context"))).build();
+		}
+
+		try {
+			Page page = context.newPage();
+			com.microsoft.playwright.Response resp = page.navigate(getResultsUrl(searchQuery));
+			if (debug.equals("true"))
+				page.screenshot(new Page.ScreenshotOptions().setPath(Paths.get("test.png")));
+			if (resp.status() != 200) {
+				log.severe(resp.statusText());
+				return Response.serverError().entity(gson.toJson(
+						new HashMap<String, String>()
+								.put("500", "Could not get YouTube results for query " + searchQuery))).build();
+			}
+			ArrayList<Recommendation> recommendations = YouTubeParser.resultsPage(page.content());
 			return Response.ok().entity(gson.toJson(recommendations)).build();
 		} catch (Exception e) {
 			log.printStackTrace(e);
