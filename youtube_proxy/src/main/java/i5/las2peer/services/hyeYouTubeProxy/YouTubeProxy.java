@@ -1,9 +1,10 @@
 package i5.las2peer.services.hyeYouTubeProxy;
 
 import java.net.HttpURLConnection;
-import java.net.URI;
 import java.nio.file.Paths;
-import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.logging.Level;
 
 import javax.ws.rs.*;
 import javax.ws.rs.core.MediaType;
@@ -25,9 +26,16 @@ import io.swagger.annotations.Info;
 import io.swagger.annotations.License;
 import io.swagger.annotations.SwaggerDefinition;
 
-import okhttp3.Cookie;
+import i5.las2peer.services.hyeYouTubeProxy.lib.IdentityManager;
+import i5.las2peer.services.hyeYouTubeProxy.lib.YouTubeParser;
+import i5.las2peer.services.hyeYouTubeProxy.lib.Recommendation;
 
-import com.microsoft.playwright.*;
+import com.google.gson.Gson;
+
+import com.microsoft.playwright.Browser;
+import com.microsoft.playwright.BrowserContext;
+import com.microsoft.playwright.Page;
+import com.microsoft.playwright.Playwright;
 
 /**
  * HyE - YouTube Proxy
@@ -35,7 +43,6 @@ import com.microsoft.playwright.*;
  * This service is used to obtain user data from YouTube via scraping.
  * To this end, it stores las2peer identities and associates them with YouTube cookies
  * which are used to obtain YouTube video recommendations.
- * 
  */
 
 @Api
@@ -58,45 +65,32 @@ public class YouTubeProxy extends RESTService {
 
 	private final String ROOT_URI = "http://localhost:8080/youtube";
 	private final String YOUTUBE_MAIN_PAGE = "https://www.youtube.com/";
+	private final String YOUTUBE_VIDEO_PAGE = "https://www.youtube.com/watch?v=";
+	private String debug;
+	private String cookieFile;
+	private String headerFile;
+	private static Browser browser;
 	private static final L2pLogger log = L2pLogger.getInstance(YouTubeProxy.class.getName());
+	private IdentityManager idm;
+	private Gson gson;
 
 	/**
 	 * Class constructor, initializes member variables
 	 */
 	public YouTubeProxy() {
-
+		setFieldValues();
+		log.info("Got properties: debug = " + debug + ", cookieFile = " + cookieFile + ", headerFile = " + headerFile);
+//		Cannot access logger of class instance before instance is created...
+//		if (debug)
+//			log.setLevel(Level.ALL);
+		Playwright playwright = Playwright.create();
+		browser = playwright.chromium().launch();
+		idm = new IdentityManager(cookieFile, headerFile);
+		gson = new Gson();
 	}
 
-	/**
-	 * Helper function to retrieve a user's YouTube ID
-	 *
-	 * @param user The User Agent whose YouTube ID we are interested in
-	 * @return The YouTube ID linked to the given user
-	 */
-	private String getUserId(UserAgent user) {
-		return user.getLoginName();
-	}
-
-	/**
-	 * Helper function to retrieve cookies for the given user
-	 *
-	 * @param user A las2peer user agent
-	 * @return Valid YouTube cookies stored for that user
-	 */
-	private String getCookies(UserAgent user) {
-		// TODO implement auth code storage
-		return null;
-	}
-
-	/**
-	 * Helper function to store the given cookies for the given user
-	 *
-	 * @param user A las2peer user agent
-	 * @param cookies Google cookies
-	 */
-	private void storeAuthCode(UserAgent user, Cookie[] cookies) {
-		// TODO implement auth code storage
-		log.info("Cookies updated for user " + getUserId(user));
+	private String getVideoUrl(String videoId) {
+		return YOUTUBE_VIDEO_PAGE + videoId;
 	}
 
 	/**
@@ -106,7 +100,7 @@ public class YouTubeProxy extends RESTService {
 	 */
 	@GET
 	@Path("/")
-	@Produces(MediaType.TEXT_PLAIN)
+	@Produces(MediaType.APPLICATION_JSON)
 	@ApiOperation(
 			value = "YouTube",
 			notes = "Returns YouTube main page")
@@ -115,17 +109,108 @@ public class YouTubeProxy extends RESTService {
 					code = HttpURLConnection.HTTP_OK,
 					message = "OK") })
 	public Response getMainPage() {
-		try (Playwright playwright = Playwright.create()) {
-			Browser browser = playwright.chromium().launch();
-			BrowserContext context = browser.newContext();
-			Page page = context.newPage();
-			page.navigate(YOUTUBE_MAIN_PAGE);
-			page.screenshot(new Page.ScreenshotOptions().setPath(Paths.get("test.png")));
+		// TODO put this somewhere more appropriate
+		if (debug.equals("true"))
+			log.setLevel(Level.ALL);
+
+		UserAgent user;
+		try {
+			user = (UserAgent) Context.getCurrent().getMainAgent();
+		} catch (Exception e) {
+			return Response.status(401).entity(gson.toJson(
+					new HashMap<String, String>().put("401", "Could not get user agent. Are you logged in?"))).build();
+		}
+
+		BrowserContext context = browser.newContext();
+
+		try {
+			context.addCookies(idm.getCookies(user));
+			context.setExtraHTTPHeaders(idm.getHeaders(user));
 		} catch (Exception e) {
 			log.printStackTrace(e);
-			return Response.serverError().entity("Unspecified server error").build();
+			return Response.serverError().entity(
+					gson.toJson(new HashMap<String, String>().put("500", "Error setting request context"))).build();
 		}
-		return Response.ok().entity("OK").build();
+
+		try {
+			Page page = context.newPage();
+			com.microsoft.playwright.Response resp = page.navigate(YOUTUBE_MAIN_PAGE);
+			if (debug.equals("true"))
+				page.screenshot(new Page.ScreenshotOptions().setPath(Paths.get("test.png")));
+			if (resp.status() != 200) {
+				log.severe(resp.statusText());
+				return Response.serverError().entity(gson.toJson(
+						new HashMap<String, String>().put("500", "Could not get YouTube main page"))).build();
+			}
+			ArrayList<Recommendation> recommendations = YouTubeParser.mainPage(page.content());
+			return Response.ok().entity(gson.toJson(recommendations)).build();
+		} catch (Exception e) {
+			log.printStackTrace(e);
+			return Response.serverError().entity(
+					gson.toJson(new HashMap<String, String>().put("500", "Unspecified server error"))).build();
+		}
+	}
+
+	/**
+	 * Recommendations shown in aside while watching the given video
+	 *
+	 * @return Personalized YouTube recommendations
+	 */
+	@GET
+	@Path("/watch")
+	@Produces(MediaType.APPLICATION_JSON)
+	@ApiOperation(
+			value = "YouTube/Watch",
+			notes = "Returns YouTube 'watch next' recommendations")
+	@ApiResponses(
+			value = { @ApiResponse(
+					code = HttpURLConnection.HTTP_OK,
+					message = "OK") })
+	public Response getAside(@QueryParam("v") String videoId) {
+		// TODO put this somewhere more appropriate
+		if (debug.equals("true"))
+			log.setLevel(Level.ALL);
+
+		if (videoId.length() == 0)
+			return Response.status(400).entity(
+					gson.toJson(new HashMap<String, String>().put("400", "Missing video Id"))).build();
+
+		UserAgent user;
+		try {
+			user = (UserAgent) Context.getCurrent().getMainAgent();
+		} catch (Exception e) {
+			return Response.status(401).entity(gson.toJson(
+					new HashMap<String, String>().put("401", "Could not get user agent. Are you logged in?"))).build();
+		}
+
+		BrowserContext context = browser.newContext();
+
+		try {
+			context.addCookies(idm.getCookies(user));
+			context.setExtraHTTPHeaders(idm.getHeaders(user));
+		} catch (Exception e) {
+			log.printStackTrace(e);
+			return Response.serverError().entity(
+					gson.toJson(new HashMap<String, String>().put("500", "Error setting request context"))).build();
+		}
+
+		try {
+			Page page = context.newPage();
+			com.microsoft.playwright.Response resp = page.navigate(getVideoUrl(videoId));
+			if (debug.equals("true"))
+				page.screenshot(new Page.ScreenshotOptions().setPath(Paths.get("test.png")));
+			if (resp.status() != 200) {
+				log.severe(resp.statusText());
+				return Response.serverError().entity(gson.toJson(new HashMap<String, String>()
+						.put("500", "Could not get recommendations for video " + videoId))).build();
+			}
+			ArrayList<Recommendation> recommendations = YouTubeParser.aside(page.content());
+			return Response.ok().entity(gson.toJson(recommendations)).build();
+		} catch (Exception e) {
+			log.printStackTrace(e);
+			return Response.serverError().entity(
+					gson.toJson(new HashMap<String, String>().put("500", "Unspecified server error"))).build();
+		}
 	}
 
 	/**

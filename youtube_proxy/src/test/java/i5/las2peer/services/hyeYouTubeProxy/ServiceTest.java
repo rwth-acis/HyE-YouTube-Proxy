@@ -31,7 +31,7 @@ public class ServiceTest {
 		private static UserAgentImpl testAgent;
 		private static final String testPass = "adamspass";
 
-		private static final String mainPath = "youtube/";
+		private static final String mainPath = "hye-youtube/";
 
 		/**
 		 * Called before a test starts.
