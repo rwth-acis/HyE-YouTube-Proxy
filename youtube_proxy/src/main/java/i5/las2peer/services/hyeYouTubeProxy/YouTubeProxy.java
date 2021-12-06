@@ -215,7 +215,7 @@ public class YouTubeProxy extends RESTService {
 
 		try {
 			Page page = context.newPage();
-			com.microsoft.playwright.Response resp = page.navigate(YOUTUBE_MAIN_PAGE);
+			com.microsoft.playwright.Response resp = page.navigate(getVideoUrl(videoId));
 			// Wait until all content is loaded (doesn't seem to work that well, so let's skip it)
 			// page.waitForLoadState(LoadState.NETWORKIDLE);
 			if (debug.equals("true"))
@@ -286,7 +286,7 @@ public class YouTubeProxy extends RESTService {
 
 		try {
 			Page page = context.newPage();
-			com.microsoft.playwright.Response resp = page.navigate(YOUTUBE_MAIN_PAGE);
+			com.microsoft.playwright.Response resp = page.navigate(getResultsUrl(searchQuery));
 			// Wait until all content is loaded (doesn't seem to work that well, so let's skip it)
 			// page.waitForLoadState(LoadState.NETWORKIDLE);
 			if (debug.equals("true"))
