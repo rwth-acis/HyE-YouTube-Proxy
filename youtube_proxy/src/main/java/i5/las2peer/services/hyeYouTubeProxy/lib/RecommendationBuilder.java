@@ -1,13 +1,11 @@
 package i5.las2peer.services.hyeYouTubeProxy.lib;
 
-import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import i5.las2peer.logging.L2pLogger;
 import i5.las2peer.services.hyeYouTubeProxy.YouTubeProxy;
 import org.jsoup.select.Elements;
 
 import java.util.HashMap;
-import java.util.Set;
 
 public abstract class RecommendationBuilder {
 
@@ -234,7 +232,6 @@ public abstract class RecommendationBuilder {
                 // Actually interesting data is buried a little deeper
                 obj = obj.get("richItemRenderer").getAsJsonObject().get("content").getAsJsonObject()
                     .get("videoRenderer").getAsJsonObject();
-                System.out.println(obj.toString());
 
                 // Try to create object
                 rec = new Recommendation(
@@ -265,7 +262,6 @@ public abstract class RecommendationBuilder {
         else if (obj.has("compactVideoRenderer")) {
             try {
                 obj = obj.get("compactVideoRenderer").getAsJsonObject();
-                System.out.println(obj.toString());
 
                 // Try to create object
                 rec = new Recommendation(

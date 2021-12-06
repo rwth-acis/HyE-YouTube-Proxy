@@ -1,21 +1,30 @@
 package i5.las2peer.services.hyeYouTubeProxy;
 
 import java.net.HttpURLConnection;
+
 import java.nio.file.Paths;
+
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.logging.Level;
 
 import javax.ws.rs.*;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+
 import i5.las2peer.api.Context;
+import i5.las2peer.execution.ExecutionContext;
 import i5.las2peer.logging.L2pLogger;
 import i5.las2peer.api.ManualDeployment;
-import i5.las2peer.api.security.UserAgent;
 import i5.las2peer.restMapper.RESTService;
 import i5.las2peer.restMapper.annotations.ServicePath;
+
+import i5.las2peer.services.hyeYouTubeProxy.lib.IdentityManager;
+import i5.las2peer.services.hyeYouTubeProxy.lib.YouTubeParser;
+import i5.las2peer.services.hyeYouTubeProxy.lib.Recommendation;
+import i5.las2peer.services.hyeYouTubeProxy.lib.Util;
 
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
@@ -26,16 +35,11 @@ import io.swagger.annotations.Info;
 import io.swagger.annotations.License;
 import io.swagger.annotations.SwaggerDefinition;
 
-import i5.las2peer.services.hyeYouTubeProxy.lib.IdentityManager;
-import i5.las2peer.services.hyeYouTubeProxy.lib.YouTubeParser;
-import i5.las2peer.services.hyeYouTubeProxy.lib.Recommendation;
-
-import com.google.gson.Gson;
-
 import com.microsoft.playwright.Browser;
 import com.microsoft.playwright.BrowserContext;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Playwright;
+// import com.microsoft.playwright.options.LoadState;
 
 /**
  * HyE - YouTube Proxy
@@ -73,7 +77,6 @@ public class YouTubeProxy extends RESTService {
 	private static Browser browser;
 	private static final L2pLogger log = L2pLogger.getInstance(YouTubeProxy.class.getName());
 	private IdentityManager idm;
-	private Gson gson;
 
 	/**
 	 * Class constructor, initializes member variables
@@ -87,7 +90,6 @@ public class YouTubeProxy extends RESTService {
 		Playwright playwright = Playwright.create();
 		browser = playwright.chromium().launch();
 		idm = new IdentityManager(cookieFile, headerFile);
-		gson = new Gson();
 	}
 
 	private String getVideoUrl(String videoId) {
@@ -118,47 +120,55 @@ public class YouTubeProxy extends RESTService {
 		if (debug.equals("true"))
 			log.setLevel(Level.ALL);
 
-		UserAgent user;
+		ExecutionContext l2pContext;
 		try {
-			user = (UserAgent) Context.getCurrent().getMainAgent();
+			l2pContext = (ExecutionContext) Context.getCurrent();
 		} catch (Exception e) {
-			return Response.status(401).entity(gson.toJson(
-					new HashMap<String, String>().put("401", "Could not get user agent. Are you logged in?"))).build();
+			log.printStackTrace(e);
+			JsonObject response = new JsonObject();
+			response.addProperty("500", "Error getting execution context.");
+			return Response.serverError().entity(response.toString()).build();
 		}
 
 		BrowserContext context = browser.newContext();
 
 		try {
-			context.addCookies(idm.getCookies(user));
-			context.setExtraHTTPHeaders(idm.getHeaders(user));
+			context.addCookies(idm.getCookies(l2pContext));
+			context.setExtraHTTPHeaders(idm.getHeaders(l2pContext));
 		} catch (Exception e) {
 			log.printStackTrace(e);
-			return Response.serverError().entity(
-					gson.toJson(new HashMap<String, String>().put("500", "Error setting request context"))).build();
+			JsonObject response = new JsonObject();
+			response.addProperty("500", "Error setting request context.");
+			return Response.serverError().entity(response.toString()).build();
 		}
 
 		try {
 			Page page = context.newPage();
 			com.microsoft.playwright.Response resp = page.navigate(YOUTUBE_MAIN_PAGE);
+			// Wait until all content is loaded (doesn't seem to work that well, so let's skip it)
+			// page.waitForLoadState(LoadState.NETWORKIDLE);
 			if (debug.equals("true"))
 				page.screenshot(new Page.ScreenshotOptions().setPath(Paths.get("test.png")));
 			if (resp.status() != 200) {
 				log.severe(resp.statusText());
-				return Response.serverError().entity(gson.toJson(
-						new HashMap<String, String>().put("500", "Could not get YouTube main page"))).build();
+				JsonObject response = new JsonObject();
+				response.addProperty("500", "Could not get YouTube main page.");
+				return Response.serverError().entity(response.toString()).build();
 			}
 			ArrayList<Recommendation> recommendations = YouTubeParser.mainPage(page.content());
-			return Response.ok().entity(gson.toJson(recommendations)).build();
+			return Response.ok().entity(Util.toJsonString(recommendations)).build();
 		} catch (Exception e) {
 			log.printStackTrace(e);
-			return Response.serverError().entity(
-					gson.toJson(new HashMap<String, String>().put("500", "Unspecified server error"))).build();
+			JsonObject response = new JsonObject();
+			response.addProperty("500", "Unspecified server error.");
+			return Response.serverError().entity(response.toString()).build();
 		}
 	}
 
 	/**
 	 * Recommendations shown in aside while watching the given video
 	 *
+	 * @param videoId The YouTube video ID of the currently playing video
 	 * @return Personalized YouTube recommendations
 	 */
 	@GET
@@ -176,58 +186,67 @@ public class YouTubeProxy extends RESTService {
 		if (debug.equals("true"))
 			log.setLevel(Level.ALL);
 
-		if (videoId.length() == 0)
-			return Response.status(400).entity(
-					gson.toJson(new HashMap<String, String>().put("400", "Missing video Id"))).build();
+		if (videoId.length() == 0) {
+			JsonObject response = new JsonObject();
+			response.addProperty("400", "Missing video Id.");
+			return Response.status(400).entity(response.toString()).build();
+		}
 
-		UserAgent user;
+		ExecutionContext l2pContext;
 		try {
-			user = (UserAgent) Context.getCurrent().getMainAgent();
+			l2pContext = (ExecutionContext) Context.getCurrent();
 		} catch (Exception e) {
-			return Response.status(401).entity(gson.toJson(
-					new HashMap<String, String>().put("401", "Could not get user agent. Are you logged in?"))).build();
+			JsonObject response = new JsonObject();
+			response.addProperty("401", "Could not get execution context. Are you logged in?");
+			return Response.status(401).entity(response.toString()).build();
 		}
 
 		BrowserContext context = browser.newContext();
 
 		try {
-			context.addCookies(idm.getCookies(user));
-			context.setExtraHTTPHeaders(idm.getHeaders(user));
+			context.addCookies(idm.getCookies(l2pContext));
+			context.setExtraHTTPHeaders(idm.getHeaders(l2pContext));
 		} catch (Exception e) {
 			log.printStackTrace(e);
-			return Response.serverError().entity(
-					gson.toJson(new HashMap<String, String>().put("500", "Error setting request context"))).build();
+			JsonObject response = new JsonObject();
+			response.addProperty("500", "Error setting request context.");
+			return Response.serverError().entity(response.toString()).build();
 		}
 
 		try {
 			Page page = context.newPage();
-			com.microsoft.playwright.Response resp = page.navigate(getVideoUrl(videoId));
+			com.microsoft.playwright.Response resp = page.navigate(YOUTUBE_MAIN_PAGE);
+			// Wait until all content is loaded (doesn't seem to work that well, so let's skip it)
+			// page.waitForLoadState(LoadState.NETWORKIDLE);
 			if (debug.equals("true"))
 				page.screenshot(new Page.ScreenshotOptions().setPath(Paths.get("test.png")));
 			if (resp.status() != 200) {
 				log.severe(resp.statusText());
-				return Response.serverError().entity(gson.toJson(new HashMap<String, String>()
-						.put("500", "Could not get recommendations for video " + videoId))).build();
+				JsonObject response = new JsonObject();
+				response.addProperty("500", "Could not get recommendations for video " + videoId);
+				return Response.serverError().entity(response.toString()).build();
 			}
 			ArrayList<Recommendation> recommendations = YouTubeParser.aside(page.content());
-			return Response.ok().entity(gson.toJson(recommendations)).build();
+			return Response.ok().entity(Util.toJsonString(recommendations)).build();
 		} catch (Exception e) {
 			log.printStackTrace(e);
-			return Response.serverError().entity(
-					gson.toJson(new HashMap<String, String>().put("500", "Unspecified server error"))).build();
+			JsonObject response = new JsonObject();
+			response.addProperty("500", "Unspecified server error.");
+			return Response.serverError().entity(response.toString()).build();
 		}
 	}
 
 	/**
-	 * Main page showing some generally interesting YouTube videos
+	 * YouTube video search results personalized for the current user
 	 *
-	 * @return Personalized YouTube recommendations
+	 * @param searchQuery The entered search query
+	 * @return Personalized YouTube video search results
 	 */
 	@GET
 	@Path("/results")
 	@Produces(MediaType.APPLICATION_JSON)
 	@ApiOperation(
-			value = "YouTube",
+			value = "YouTube/Results",
 			notes = "Returns YouTube search results")
 	@ApiResponses(
 			value = { @ApiResponse(
@@ -238,69 +257,111 @@ public class YouTubeProxy extends RESTService {
 		if (debug.equals("true"))
 			log.setLevel(Level.ALL);
 
-		if (searchQuery.length() == 0)
-			return Response.status(400).entity(
-					gson.toJson(new HashMap<String, String>().put("400", "Missing search query"))).build();
+		if (searchQuery.length() == 0) {
+			JsonObject response = new JsonObject();
+			response.addProperty("400", "Missing search query.");
+			return Response.status(400).entity(response.toString()).build();
+		}
 
-		UserAgent user;
+		ExecutionContext l2pContext;
 		try {
-			user = (UserAgent) Context.getCurrent().getMainAgent();
+			l2pContext = (ExecutionContext) Context.getCurrent();
 		} catch (Exception e) {
-			return Response.status(401).entity(gson.toJson(
-					new HashMap<String, String>().put("401", "Could not get user agent. Are you logged in?"))).build();
+			JsonObject response = new JsonObject();
+			response.addProperty("401", "Could not get execution context. Are you logged in?");
+			return Response.status(401).entity(response.toString()).build();
 		}
 
 		BrowserContext context = browser.newContext();
 
 		try {
-			context.addCookies(idm.getCookies(user));
-			context.setExtraHTTPHeaders(idm.getHeaders(user));
+			context.addCookies(idm.getCookies(l2pContext));
+			context.setExtraHTTPHeaders(idm.getHeaders(l2pContext));
 		} catch (Exception e) {
 			log.printStackTrace(e);
-			return Response.serverError().entity(
-					gson.toJson(new HashMap<String, String>().put("500", "Error setting request context"))).build();
+			JsonObject response = new JsonObject();
+			response.addProperty("500", "Error setting request context.");
+			return Response.serverError().entity(response.toString()).build();
 		}
 
 		try {
 			Page page = context.newPage();
-			com.microsoft.playwright.Response resp = page.navigate(getResultsUrl(searchQuery));
+			com.microsoft.playwright.Response resp = page.navigate(YOUTUBE_MAIN_PAGE);
+			// Wait until all content is loaded (doesn't seem to work that well, so let's skip it)
+			// page.waitForLoadState(LoadState.NETWORKIDLE);
 			if (debug.equals("true"))
 				page.screenshot(new Page.ScreenshotOptions().setPath(Paths.get("test.png")));
 			if (resp.status() != 200) {
 				log.severe(resp.statusText());
-				return Response.serverError().entity(gson.toJson(
-						new HashMap<String, String>()
-								.put("500", "Could not get YouTube results for query " + searchQuery))).build();
+				JsonObject response = new JsonObject();
+				response.addProperty("500", "Could not get YouTube results for query " + searchQuery);
+				return Response.serverError().entity(response.toString()).build();
 			}
 			ArrayList<Recommendation> recommendations = YouTubeParser.resultsPage(page.content());
-			return Response.ok().entity(gson.toJson(recommendations)).build();
+			return Response.ok().entity(Util.toJsonString(recommendations)).build();
 		} catch (Exception e) {
 			log.printStackTrace(e);
-			return Response.serverError().entity(
-					gson.toJson(new HashMap<String, String>().put("500", "Unspecified server error"))).build();
+			JsonObject response = new JsonObject();
+			response.addProperty("500", "Unspecified server error");
+			return Response.serverError().entity(response.toString()).build();
 		}
 	}
 
 	/**
-	 * Template of a post function.
+	 * Function to store personal YouTube session cookies for the current user
 	 * 
-	 * @param myInput The post input the user will provide.
-	 * @return Returns an HTTP response with plain text string content derived from the path input param.
+	 * @param cookies The POST data containing the cookies to store
+	 * @return Returns an HTTP response with plain text string content indicating whether storing was successful or not
 	 */
 	@POST
-	@Path("/post/{input}")
+	@Path("/cookies")
+	@Consumes(MediaType.APPLICATION_JSON)
 	@Produces(MediaType.TEXT_PLAIN)
 	@ApiResponses(
 			value = { @ApiResponse(
 					code = HttpURLConnection.HTTP_OK,
-					message = "REPLACE THIS WITH YOUR OK MESSAGE") })
+					message = "OK") })
 	@ApiOperation(
-			value = "REPLACE THIS WITH AN APPROPRIATE FUNCTION NAME",
-			notes = "Example method that returns a phrase containing the received input.")
-	public Response postTemplate(@PathParam("input") String myInput) {
-		String returnString = "";
-		returnString += "Input " + myInput;
-		return Response.ok().entity(returnString).build();
+			value = "YouTube/Cookies",
+			notes = "[{'name': 'cookie_name_1', 'value': 'cookie_value_1'}," +
+					"{'name': 'cookie_name_2', 'value': 'cookie_value_2'}, ...]")
+	public Response setCookies(String cookies) {
+		ExecutionContext context = null;
+		try {
+			context = (ExecutionContext) Context.getCurrent();
+		} catch (Exception e) {
+			Response.status(401).entity("Could not get execution context. Are you logged in?").build();
+		}
+		JsonObject response = idm.storeCookies(context, Util.toJsonArray(cookies));
+		return Response.status(response.get("status").getAsInt()).entity(response.get("msg").getAsString()).build();
+	}
+
+	/**
+	 * Function to store user specific HTTP headers for current user
+	 *
+	 * @param headers The POST data containing the headers to store
+	 * @return Returns an HTTP response with plain text string content indicating whether storing was successful or not
+	 */
+	@POST
+	@Path("/headers")
+	@Consumes(MediaType.APPLICATION_JSON)
+	@Produces(MediaType.TEXT_PLAIN)
+	@ApiResponses(
+			value = { @ApiResponse(
+					code = HttpURLConnection.HTTP_OK,
+					message = "OK") })
+	@ApiOperation(
+			value = "YouTube/Headers",
+			notes = "{'header_name_1': 'header_value_1', 'header_value_2': 'header_value_2', ... }")
+	public Response setHeaders(String headers) {
+		ExecutionContext context = null;
+		try {
+			context = (ExecutionContext) Context.getCurrent();
+		} catch (Exception e) {
+			Response.status(401).entity("Could not get execution context. Are you logged in?").build();
+		}
+		JsonObject response = idm.storeHeaders(context, Util.toJsonObject(headers));
+		return Response.status(response.get("status").getAsInt()).entity(response.get("msg").getAsString()).build();
 	}
 
 	// TODO your own service methods, e. g. for RMI
