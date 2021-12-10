@@ -53,7 +53,7 @@ import com.microsoft.playwright.Playwright;
 @SwaggerDefinition(
 		info = @Info(
 				title = "YouTube Data Proxy",
-				version = "0.1",
+				version = "0.1.0",
 				description = "Part of How's your Experience. Used to obtain data from YouTube.",
 				termsOfService = "http://your-terms-of-service-url.com",
 				contact = @Contact(
@@ -310,7 +310,7 @@ public class YouTubeProxy extends RESTService {
 	/**
 	 * Function to store personal YouTube session cookies for the current user
 	 * 
-	 * @param cookies The POST data containing the cookies to store
+	 * @param reqData The POST data containing the cookies to store and IDs of users allowed to read them
 	 * @return Returns an HTTP response with plain text string content indicating whether storing was successful or not
 	 */
 	@POST
@@ -323,23 +323,33 @@ public class YouTubeProxy extends RESTService {
 					message = "OK") })
 	@ApiOperation(
 			value = "YouTube/Cookies",
-			notes = "[{'name': 'cookie_name_1', 'value': 'cookie_value_1'}," +
-					"{'name': 'cookie_name_2', 'value': 'cookie_value_2'}, ...]")
-	public Response setCookies(String cookies) {
+			notes = "{'cookies': [{'name': 'cookie_name_1', 'value': 'cookie_value_1'}," +
+					"{'name': 'cookie_name_2', 'value': 'cookie_value_2'}, ...]," +
+					"'readers': ['username_of_reader_1', 'username_of_reader_2', ... ]")
+	public Response setCookies(String reqData) {
 		ExecutionContext context = null;
+		JsonArray cookies = null;
+		JsonArray readers = null;
 		try {
 			context = (ExecutionContext) Context.getCurrent();
 		} catch (Exception e) {
 			Response.status(401).entity("Could not get execution context. Are you logged in?").build();
 		}
-		JsonObject response = idm.storeCookies(context, Util.toJsonArray(cookies));
+		try {
+			JsonObject reqJsonData = Util.toJsonObject(reqData);
+			cookies = reqJsonData.get("cookies").getAsJsonArray();
+			readers = reqJsonData.get("readers").getAsJsonArray();
+		} catch (Exception e) {
+			Response.status(400).entity("Malformed POST data.").build();
+		}
+		JsonObject response = idm.storeCookies(context, cookies, Util.jsonToArrayList(readers));
 		return Response.status(response.get("status").getAsInt()).entity(response.get("msg").getAsString()).build();
 	}
 
 	/**
 	 * Function to store user specific HTTP headers for current user
 	 *
-	 * @param headers The POST data containing the headers to store
+	 * @param reqData The POST data containing the headers to store and IDs of users allowed to read them
 	 * @return Returns an HTTP response with plain text string content indicating whether storing was successful or not
 	 */
 	@POST
@@ -352,15 +362,25 @@ public class YouTubeProxy extends RESTService {
 					message = "OK") })
 	@ApiOperation(
 			value = "YouTube/Headers",
-			notes = "{'header_name_1': 'header_value_1', 'header_value_2': 'header_value_2', ... }")
-	public Response setHeaders(String headers) {
+			notes = "{'headers': {'header_name_1': 'header_value_1', 'header_value_2': 'header_value_2', ... }," +
+					"'readers': ['username_of_reader_1', 'username_of_reader_2', ... ]")
+	public Response setHeaders(String reqData) {
 		ExecutionContext context = null;
+		JsonObject headers = null;
+		JsonArray readers = null;
 		try {
 			context = (ExecutionContext) Context.getCurrent();
 		} catch (Exception e) {
 			Response.status(401).entity("Could not get execution context. Are you logged in?").build();
 		}
-		JsonObject response = idm.storeHeaders(context, Util.toJsonObject(headers));
+		try {
+			JsonObject reqJsonData = Util.toJsonObject(reqData);
+			headers = reqJsonData.get("headers").getAsJsonObject();
+			readers = reqJsonData.get("readers").getAsJsonArray();
+		} catch (Exception e) {
+			Response.status(400).entity("Malformed POST data.").build();
+		}
+		JsonObject response = idm.storeHeaders(context, headers, Util.jsonToArrayList(readers));
 		return Response.status(response.get("status").getAsInt()).entity(response.get("msg").getAsString()).build();
 	}
 

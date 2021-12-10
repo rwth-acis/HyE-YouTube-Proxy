@@ -43,4 +43,13 @@ public abstract class Util {
         }
         return result;
     }
+
+    public static ArrayList<String> jsonToArrayList(JsonArray jsonArray) {
+        ArrayList<String> result = new ArrayList<String>();
+        Iterator<JsonElement> it = jsonArray.iterator();
+        while (it.hasNext()) {
+            result.add(it.next().getAsString());
+        }
+        return result;
+    }
 }

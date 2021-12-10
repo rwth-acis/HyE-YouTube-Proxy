@@ -1,5 +1,6 @@
 package i5.las2peer.services.hyeYouTubeProxy.lib;
 
+import i5.las2peer.api.Context;
 import i5.las2peer.execution.ExecutionContext;
 import i5.las2peer.api.persistency.Envelope;
 import i5.las2peer.services.hyeYouTubeProxy.YouTubeProxy;
@@ -15,6 +16,7 @@ import com.microsoft.playwright.options.Cookie;
 
 import java.io.File;
 import java.io.FileReader;
+import java.lang.reflect.Array;
 import java.util.*;
 
 public class IdentityManager {
@@ -114,6 +116,17 @@ public class IdentityManager {
         return user.getIdentifier();
     }
 
+    private UserAgent getUserAgent(Context context, String handle) {
+        UserAgent user;
+        try {
+            user = (UserAgent) context.fetchAgent(handle);
+        } catch (Exception e) {
+            log.printStackTrace(e);
+            return null;
+        }
+        return user;
+    }
+
     /**
      * Retrieve the handle used to store cookies for the given user
      *
@@ -196,6 +209,27 @@ public class IdentityManager {
         return result;
     }
 
+    private Envelope getEnvelope(Context context, String handle) {
+        Envelope env;
+
+        // See whether envelope already exists
+        try {
+            env = context.requestEnvelope(handle);
+            return env;
+        } catch (Exception e) {
+            // Envelope does not exist
+            env = null;
+        }
+
+        // Else create envelope
+        try {
+            env = context.createEnvelope(handle);
+        } catch (Exception e) {
+            env = null;
+        }
+        return env;
+    }
+
     /**
      * Retrieve cookies for the given user
      *
@@ -241,13 +275,64 @@ public class IdentityManager {
     }
 
     /**
+     * Store the given headers for the current user
+     *
+     * @param context The current execution context required to access the user's local storage
+     * @param headers HTTP headers
+     * @param readers Identifiers of las2peer users, allowed to access stored headers
+     * @return Stored content as Json object or error message
+     */
+    public JsonObject storeHeaders(ExecutionContext context, JsonObject headers, ArrayList<String> readers) {
+        UserAgent user;
+        JsonObject response = new JsonObject();
+        try {
+            user = (UserAgent) context.getMainAgent();
+        } catch (Exception e) {
+            log.printStackTrace(e);
+            response.addProperty("status", 400);
+            response.addProperty("msg", "Could not get user agent. Are you logged in?");
+            return response;
+        }
+
+        String responseMsg = "{'";
+        try {
+            String headerHandle = getHeaderHandle(user);
+            Envelope headerEnvelope = getEnvelope(context, headerHandle);
+
+            responseMsg += headerHandle + "': ";
+            String headerData = headers.toString();
+            headerEnvelope.setContent(headerData);
+            responseMsg += headerData + "}";
+
+            Iterator<String> it = readers.iterator();
+            while (it.hasNext()) {
+                UserAgent reader = getUserAgent(context, it.next());
+                if (reader != null)
+                    headerEnvelope.addReader(reader);
+            }
+
+            context.storeEnvelope(headerEnvelope);
+        } catch (Exception e) {
+            log.printStackTrace(e);
+            response.addProperty("status", 500);
+            response.addProperty("msg", "Error storing headers.");
+            return response;
+        }
+        log.info("Headers updated for user " + getUserId(user));
+        response.addProperty("status", 200);
+        response.addProperty("msg", responseMsg);
+        return response;
+    }
+
+    /**
      * Store the given cookies for the current user
      *
      * @param context The current execution context required to access the user's local storage
-     * @param cookies Google cookies
-     * @return Stored content as string or error message
+     * @param cookies YouTube cookies
+     * @param readers Identifiers of las2peer users, allowed to access stored cookies
+     * @return Stored content as Json object or error message
      */
-    public JsonObject storeCookies(ExecutionContext context, JsonArray cookies) {
+    public JsonObject storeCookies(ExecutionContext context, JsonArray cookies, ArrayList<String> readers) {
         UserAgent user;
         JsonObject response = new JsonObject();
         try {
@@ -265,13 +350,20 @@ public class IdentityManager {
         String responseMsg = "{'";
         try {
             String cookieHandle = getCookieHandle(user);
-            Envelope cookieEnvelope = context.createEnvelope(cookieHandle);
+            Envelope cookieEnvelope = getEnvelope(context, cookieHandle);
+
             responseMsg += cookieHandle + "': ";
             String cookieData = parsedCookies.toString();
             cookieEnvelope.setContent(cookieData);
             responseMsg += cookieData + "}";
-            // TODO implement shared access
-            //cookieEnvelope.addReader();
+
+            Iterator<String> it = readers.iterator();
+            while (it.hasNext()) {
+                UserAgent reader = getUserAgent(context, it.next());
+                if (reader != null)
+                    cookieEnvelope.addReader(reader);
+            }
+
             context.storeEnvelope(cookieEnvelope);
         } catch (Exception e) {
             log.printStackTrace(e);
@@ -280,47 +372,6 @@ public class IdentityManager {
             return response;
         }
         log.info("Cookies updated for user " + getUserId(user));
-        response.addProperty("status", 200);
-        response.addProperty("msg", responseMsg);
-        return response;
-    }
-
-    /**
-     * Store the given headers for the current user
-     *
-     * @param context The current execution context required to access the user's local storage
-     * @param headers HTTP headers
-     */
-    public JsonObject storeHeaders(ExecutionContext context, JsonObject headers) {
-        UserAgent user;
-        JsonObject response = new JsonObject();
-        try {
-            user = (UserAgent) context.getMainAgent();
-        } catch (Exception e) {
-            log.printStackTrace(e);
-            response.addProperty("status", 400);
-            response.addProperty("msg", "Could not get user agent. Are you logged in?");
-            return response;
-        }
-
-        String responseMsg = "{'";
-        try {
-            String headerHandle = getHeaderHandle(user);
-            Envelope headerEnvelope = context.createEnvelope(headerHandle);
-            responseMsg += headerHandle + "': ";
-            String headerData = headers.toString();
-            headerEnvelope.setContent(headerData);
-            responseMsg += headerData + "}";
-            // TODO implement shared access
-            //cookieEnvelope.addReader();
-            context.storeEnvelope(headerEnvelope);
-        } catch (Exception e) {
-            log.printStackTrace(e);
-            response.addProperty("status", 500);
-            response.addProperty("msg", "Error storing headers.");
-            return response;
-        }
-        log.info("Headers updated for user " + getUserId(user));
         response.addProperty("status", 200);
         response.addProperty("msg", responseMsg);
         return response;
