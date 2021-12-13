@@ -1,11 +1,15 @@
-package i5.las2peer.services.hyeYouTubeProxy.lib;
+package i5.las2peer.services.hyeYouTubeProxy.identityManagement;
 
 import i5.las2peer.api.Context;
 import i5.las2peer.execution.ExecutionContext;
 import i5.las2peer.api.persistency.Envelope;
+import i5.las2peer.p2p.EthereumNode;
+import i5.las2peer.security.ServiceAgentImpl;
 import i5.las2peer.services.hyeYouTubeProxy.YouTubeProxy;
 import i5.las2peer.logging.L2pLogger;
 import i5.las2peer.api.security.UserAgent;
+import i5.las2peer.registry.ReadWriteRegistryClient;
+import i5.las2peer.registry.Util;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonArray;
@@ -13,10 +17,10 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 import com.microsoft.playwright.options.Cookie;
+import i5.las2peer.services.hyeYouTubeProxy.lib.ParserUtil;
 
 import java.io.File;
 import java.io.FileReader;
-import java.lang.reflect.Array;
 import java.util.*;
 
 public class IdentityManager {
@@ -26,6 +30,8 @@ public class IdentityManager {
     private ArrayList<Cookie> cookies;
     private HashMap<String, String> headers;
     private static final L2pLogger log = L2pLogger.getInstance(YouTubeProxy.class.getName());
+    private ReadWriteRegistryClient registryClient;
+    private ConsentRegistry consentRegistry;
 
     private final String COOKIE_SUFFIX = "_cookies";
     private final String HEADER_SUFFIX = "_headers";
@@ -33,7 +39,7 @@ public class IdentityManager {
     private final String YOUTUBE_COOKIE_PATH = "/";
 
     // Constructor setting up storage
-        public IdentityManager(String cookieFile, String headerFile) {
+    public IdentityManager(String cookieFile, String headerFile) {
         this.cookieFile = cookieFile;
         this.headerFile = headerFile;
 
@@ -45,6 +51,19 @@ public class IdentityManager {
             this.cookies = parseCookiesFromFile(cookieFile);
             this.headers = parseHeadersFromFile(headerFile);
         }
+    }
+
+    public boolean initialize(ExecutionContext context, String consentRegistryAddress) {
+        try {
+            ServiceAgentImpl agent = (ServiceAgentImpl) context.getServiceAgent();
+            registryClient = ((EthereumNode) agent.getRunningAtNode()).getRegistryClient();
+            consentRegistry = registryClient.loadSmartContract(ConsentRegistry.class, consentRegistryAddress);
+        } catch (Exception e) {
+            log.warning("Initialization of smart contracts failed!");
+            log.printStackTrace(e);
+            return false;
+        }
+        return true;
     }
 
     /**
@@ -184,7 +203,7 @@ public class IdentityManager {
     private ArrayList<Cookie> JsonStringToCookieArray(String cookieArray) {
         ArrayList<Cookie> result = new ArrayList<Cookie>();
         try {
-            JsonArray cookieJsonArray = Util.toJsonArray(cookieArray);
+            JsonArray cookieJsonArray = ParserUtil.toJsonArray(cookieArray);
             Iterator<JsonElement> it = cookieJsonArray.iterator();
             while (it.hasNext()) {
                 JsonObject cookieObj = (JsonObject) it.next();
@@ -238,7 +257,7 @@ public class IdentityManager {
      */
     public ArrayList<Cookie> getCookies(ExecutionContext context) {
         // If cookies were parsed from a static file, return this
-        if (!this.cookies.isEmpty())
+        if (this.cookies != null && !this.cookies.isEmpty())
             return this.cookies;
 
         // Else retrieve cookies from local storage
@@ -250,6 +269,8 @@ public class IdentityManager {
             log.printStackTrace(e);
             return null;
         }
+
+        // TODO add blockchain check
     }
 
     /**
@@ -260,14 +281,14 @@ public class IdentityManager {
      */
     public HashMap<String, String> getHeaders(ExecutionContext context) {
         // If headers were parsed from a static file, return this
-        if (!this.headers.isEmpty())
+        if (this.headers != null && !this.headers.isEmpty())
             return this.headers;
 
         // Else retrieve headers from local storage
         try {
             UserAgent user = (UserAgent) context.getMainAgent();
             Envelope headerEnvelope = context.requestEnvelope(getHeaderHandle(user));
-            return Util.jsonToMap(Util.toJsonObject(headerEnvelope.getContent().toString()));
+            return ParserUtil.jsonToMap(ParserUtil.toJsonObject(headerEnvelope.getContent().toString()));
         } catch (Exception e) {
             log.printStackTrace(e);
             return null;
@@ -372,6 +393,45 @@ public class IdentityManager {
             return response;
         }
         log.info("Cookies updated for user " + getUserId(user));
+        response.addProperty("status", 200);
+        response.addProperty("msg", responseMsg);
+        return response;
+    }
+
+    /**
+     * Stores the given consent options for the current user
+     *
+     * @param context The current execution context required to access the user's local storage
+     * @param consentData The consent data as JSON object
+     * @return Status code and appropriate message as JSON object
+     */
+    public JsonObject updateConsent(ExecutionContext context, JsonObject consentData) {
+        String user;
+        JsonObject response = new JsonObject();
+        try {
+            user = getUserId((UserAgent) context.getMainAgent());
+        } catch (Exception e) {
+            log.printStackTrace(e);
+            response.addProperty("status", 400);
+            response.addProperty("msg", "Could not get user agent. Are you logged in?");
+            return response;
+        }
+
+        String responseMsg = "";
+        try {
+            Consent consentObj = new Consent(user, consentData.get("reader").getAsString(),
+                    consentData.get("requestUri").getAsString(), consentData.get("anonymous").getAsBoolean());
+
+            // Create hash to store on chain
+            consentRegistry.storeConsent(Util.soliditySha3(consentObj.toString())).sendAsync().get();
+            responseMsg = consentObj.toString();
+        } catch (Exception e) {
+            log.printStackTrace(e);
+            response.addProperty("status", 500);
+            response.addProperty("msg", "Error updating consent.");
+            return response;
+        }
+        log.info("Consent updated for user " + user);
         response.addProperty("status", 200);
         response.addProperty("msg", responseMsg);
         return response;

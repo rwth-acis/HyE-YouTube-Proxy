@@ -10,7 +10,7 @@ import java.util.Set;
 import java.util.ArrayList;
 import java.util.Iterator;
 
-public abstract class Util {
+public abstract class ParserUtil {
 
     public static boolean isBlankSpace(char c) {
         return (c == ' ' || c == '\t' || c == '\r' || c == '\n' || Character.isWhitespace(c));

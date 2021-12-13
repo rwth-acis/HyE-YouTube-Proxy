@@ -1,8 +1,9 @@
-package i5.las2peer.services.hyeYouTubeProxy.lib;
+package i5.las2peer.services.hyeYouTubeProxy.parser;
 
 import com.google.gson.JsonObject;
 import i5.las2peer.logging.L2pLogger;
 import i5.las2peer.services.hyeYouTubeProxy.YouTubeProxy;
+import i5.las2peer.services.hyeYouTubeProxy.lib.ParserUtil;
 import org.jsoup.select.Elements;
 
 import java.util.HashMap;
@@ -64,7 +65,7 @@ public abstract class RecommendationBuilder {
         for (int i = 0; i < rawDescription.length(); ++i) {
             switch (phase) {
                 case 0:
-                    if (!Util.isBlankSpace(rawDescription.charAt(i)))
+                    if (!ParserUtil.isBlankSpace(rawDescription.charAt(i)))
                     {
                         buffer += rawDescription.charAt(i);
                         ++phase;
@@ -80,7 +81,7 @@ public abstract class RecommendationBuilder {
                         buffer += rawDescription.charAt(i);
                     continue;
                 case 2:
-                    if (!Util.isBlankSpace(rawDescription.charAt(i)))
+                    if (!ParserUtil.isBlankSpace(rawDescription.charAt(i)))
                     {
                         buffer += rawDescription.charAt(i);
                         ++phase;
@@ -100,7 +101,7 @@ public abstract class RecommendationBuilder {
                         ++phase;
                     continue;
                 case 5:
-                    if (Util.isAlphaNumeric(rawDescription.charAt(i)))
+                    if (ParserUtil.isAlphaNumeric(rawDescription.charAt(i)))
                     {
                         buffer += rawDescription.charAt(i);
                         ++phase;
@@ -116,7 +117,7 @@ public abstract class RecommendationBuilder {
                         buffer += rawDescription.charAt(i);
                     continue;
                 case 7:
-                    if (Util.isAlphaNumeric(rawDescription.charAt(i)))
+                    if (ParserUtil.isAlphaNumeric(rawDescription.charAt(i)))
                     {
                         buffer += rawDescription.charAt(i);
                         ++phase;
@@ -128,7 +129,7 @@ public abstract class RecommendationBuilder {
                         // remove trailing spaces
                         for (int j = buffer.length()-1; j > 0; --j)
                         {
-                            if (Util.isAlphaNumeric(rawDescription.charAt(j)))
+                            if (ParserUtil.isAlphaNumeric(rawDescription.charAt(j)))
                             {
                                 buffer = buffer.substring(0, j+1);
                                 ++phase;
