@@ -7,6 +7,7 @@
 
 repositories {
     // Use JCenter for resolving dependencies.
+    jcenter()
     mavenCentral()
 
     // DBIS Archiva
@@ -25,7 +26,7 @@ dependencies {
 
     // las2peer bundle which is not necessary in the runtime path
     // compileOnly will be moved into the lib dir afterwards
-    implementation "i5:las2peer-bundle:${project.property('core.version')}"
+    compileOnly "i5:las2peer-bundle:${project.property('core.version')}"
 
     // Google API
 //    compile 'com.google.api-client:google-api-client:1.32.2'
@@ -34,12 +35,12 @@ dependencies {
 
     // Scraping
     implementation 'com.microsoft.playwright:playwright:1.17.0'
-    implementation 'org.jsoup:jsoup:1.10.1'
+    compile 'org.jsoup:jsoup:1.10.1'
 }
 
 configurations {
     // This ensures las2peer is available in the tests, but won't be bundled
-    testImplementation.extendsFrom implementation
+    testCompile.extendsFrom compileOnly
 }
 
 jar {
@@ -63,15 +64,14 @@ application {
     archivesBaseName = group
 
     version = "${project.property('service.version')}"
-    mainClass.set("i5.las2peer.tools.L2pNodeLauncher")
+    mainClassName = "i5.las2peer.tools.L2pNodeLauncher"
     sourceCompatibility = "${project.property('java.version')}"
     targetCompatibility = "${project.property('java.version')}"
 }
 
 // put all .jar files into export/jars folder
 tasks.withType(Jar) {
-    duplicatesStrategy = DuplicatesStrategy.WARN
-    destinationDirectory = file("$projectDir/export/jars")
+    destinationDir = file("$projectDir/export/jars")
 }
 
 javadoc {
@@ -240,7 +240,7 @@ task cleanAll {
 }
 
 jacoco {
-    toolVersion = "0.8.7"
+    toolVersion = "0.8.6"
     reportsDirectory = file("$projectDir/export/jacoco")
 }
 
