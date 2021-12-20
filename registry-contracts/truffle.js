@@ -18,7 +18,7 @@ module.exports = {
             gas: 2000000
         },
         docker_boot: {
-            host: '127.0.0.1',
+            host: 'eth-bootstrap',
             port: 8545,
             network_id: '456719',
             gas: 5000000

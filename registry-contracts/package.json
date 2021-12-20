@@ -1,11 +1,10 @@
 {
   "name": "las2peer-registry-contracts",
-  "version": "0.0.2",
+  "version": "1.0.0",
   "description": "Solidity smart contracts for the las2peer Service Registry",
   "files": [
     "contracts",
     "migrations",
-    "test",
     "truffle.js"
   ],
   "scripts": {
@@ -18,7 +17,6 @@
     "ganache": "node_modules/.bin/ganache-cli --mnemonic 'differ employ cook sport clinic wedding melody column pave stuff oak price'",
     "start-ganache": "node_modules/.bin/ganache-cli --mnemonic 'differ employ cook sport clinic wedding melody column pave stuff oak price' >/dev/null & echo $! > .ganache-cli_pid",
     "stop-ganache": "kill -s QUIT $(cat .ganache-cli_pid) && rm -f .ganache-cli_pid",
-    "test": "node_modules/.bin/truffle test",
     "truffle": "node_modules/.bin/truffle"
   },
   "repository": {
