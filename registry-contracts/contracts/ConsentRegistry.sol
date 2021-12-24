@@ -27,7 +27,7 @@ contract ConsentRegistry {
 
     // Sets the revoked attribute of the given hash to false
     function revokeConsent(bytes32 consentHash) public {
-        if (!hashExists(consentHash)) revert("No consent stored for this user.");
+        if (!hashExists(consentHash)) revert("Provided consent hash not found on chain.");
         _createConsent(Consent(consentHash, now, false));
     }
 }

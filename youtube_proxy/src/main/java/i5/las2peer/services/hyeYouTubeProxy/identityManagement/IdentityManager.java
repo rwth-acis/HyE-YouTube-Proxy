@@ -135,6 +135,13 @@ public class IdentityManager {
         return user.getIdentifier();
     }
 
+    /**
+     * Fetches the user associated with the given handle
+     *
+     * @param context The current context from which the agent is fetched
+     * @param handle The current las2peer ID of the user in question
+     * @return The requested las2peer user agent or null if there was an issue
+     */
     private UserAgent getUserAgent(Context context, String handle) {
         UserAgent user;
         try {
@@ -228,6 +235,13 @@ public class IdentityManager {
         return result;
     }
 
+    /**
+     * Helper function which either fetches or creates an envelope with the given handle
+     *
+     * @param context The current execution context required to access the user's local storage
+     * @param handle The handle associated with the envelope in question
+     * @return The requested las2peer envelope objet
+     */
     private Envelope getEnvelope(Context context, String handle) {
         Envelope env;
 
@@ -250,44 +264,75 @@ public class IdentityManager {
     }
 
     /**
+     * Helper function building a Consent object from the provided JSON data
+     *
+     * @param userId The user id of the owner of the consent object in question
+     * @param consentData The consent options as JSON data
+     * @return A valid Consent object or null, if provided data was flawed
+     */
+    private Consent createConsentObj(String userId, JsonObject consentData) {
+        try {
+            return new Consent(userId, consentData.get("reader").getAsString(),
+                    consentData.get("requestUri").getAsString(), consentData.get("anonymous").getAsBoolean());
+        } catch (Exception e) {
+            log.printStackTrace(e);
+            return null;
+        }
+    }
+
+    /**
      * Retrieve cookies for the given user
      *
-     * @param context The current execution context required to access the user's local storage
-     * @return Valid YouTube cookies stored for that user
+     * @param context The current execution context required to fetch the cookies accessible to the current user
+     * @param owner The user whose cookies are requested
+     * @param reqUri The request URI for which the cookies are requested
+     * @oaram anon Whether the identity of the cookies' owner is known to the requesting user
+     * @return Valid YouTube cookies stored for the requested user if requesting user has required permissions
      */
-    public ArrayList<Cookie> getCookies(ExecutionContext context) {
+    public ArrayList<Cookie> getCookies(ExecutionContext context, UserAgent owner, String reqUri, boolean anon) {
         // If cookies were parsed from a static file, return this
         if (this.cookies != null && !this.cookies.isEmpty())
             return this.cookies;
 
-        // Else retrieve cookies from local storage
+        // Else retrieve cookies from las2peer storage
         try {
-            UserAgent user = (UserAgent) context.getMainAgent();
-            Envelope cookieEnvelope = context.requestEnvelope(getCookieHandle(user));
+            // Check whether user is allowed to access the owner's cookies
+            Envelope cookieEnvelope = context.requestEnvelope(getCookieHandle(owner));
+
+            // Make sure that user has the proper permissions to use the cookie for the specified request
+            if (!checkConsent(new Consent(getUserId(owner), getUserId((UserAgent) context.getMainAgent()), reqUri,
+                    anon)))
+                return null;
             return JsonStringToCookieArray(cookieEnvelope.getContent().toString());
         } catch (Exception e) {
             log.printStackTrace(e);
             return null;
         }
-
-        // TODO add blockchain check
     }
 
     /**
      * Retrieve HTTP headers for the given user
      *
-     * @param context The current execution context required to access the user's local storage
+     * @param context The current execution context required to fetch the cookies accessible to the current user
+     * @param owner The user whose cookies are requested
+     * @param reqUri The request URI for which the cookies are requested
+     * @oaram anon Whether the identity of the cookies' owner is known to the requesting user
      * @return Valid HTTP headers stored for that user
      */
-    public HashMap<String, String> getHeaders(ExecutionContext context) {
+    public HashMap<String, String> getHeaders(ExecutionContext context, UserAgent owner, String reqUri, boolean anon) {
         // If headers were parsed from a static file, return this
         if (this.headers != null && !this.headers.isEmpty())
             return this.headers;
 
         // Else retrieve headers from local storage
         try {
-            UserAgent user = (UserAgent) context.getMainAgent();
-            Envelope headerEnvelope = context.requestEnvelope(getHeaderHandle(user));
+            // Check whether user is allowed to access the owner's headers
+            Envelope headerEnvelope = context.requestEnvelope(getHeaderHandle(owner));
+
+            // Make sure that user has the proper permissions to use the headers for the specified request
+            if (!checkConsent(new Consent(getUserId(owner), getUserId((UserAgent) context.getMainAgent()), reqUri,
+                    anon)))
+                return null;
             return ParserUtil.jsonToMap(ParserUtil.toJsonObject(headerEnvelope.getContent().toString()));
         } catch (Exception e) {
             log.printStackTrace(e);
@@ -417,23 +462,84 @@ public class IdentityManager {
             return response;
         }
 
-        String responseMsg = "";
-        try {
-            Consent consentObj = new Consent(user, consentData.get("reader").getAsString(),
-                    consentData.get("requestUri").getAsString(), consentData.get("anonymous").getAsBoolean());
+        Consent consentObj = createConsentObj(user, consentData);
+        if (consentObj == null)
+        {
+            response.addProperty("status", 400);
+            response.addProperty("msg", "Invalid consent data.");
+            return response;
+        }
 
-            // Create hash to store on chain
+        try {
             consentRegistry.storeConsent(Util.soliditySha3(consentObj.toString())).sendAsync().get();
-            responseMsg = consentObj.toString();
         } catch (Exception e) {
             log.printStackTrace(e);
             response.addProperty("status", 500);
-            response.addProperty("msg", "Error updating consent.");
+            response.addProperty("msg", "Error in blockchain communication.");
             return response;
         }
+
         log.info("Consent updated for user " + user);
         response.addProperty("status", 200);
-        response.addProperty("msg", responseMsg);
+        response.addProperty("msg", consentObj.toString());
+        return response;
+    }
+
+    /**
+     * Checks whether the requested consent object is currently stored on the blockchain
+     *
+     * @param consentObj The specific consent options
+     * @return Status code and appropriate message as JSON object
+     */
+    private boolean checkConsent(Consent consentObj) {
+        try {
+            return consentRegistry.hashExists(Util.soliditySha3(consentObj.toString())).sendAsync().get();
+        } catch (Exception e) {
+            log.severe("Error while checking consent.");
+            log.printStackTrace(e);
+            return false;
+        }
+    }
+
+    /**
+     * Invalidates the provided consent object
+     *
+     * @param context The current execution context required to access the user's local storage
+     * @param consentData The consent data given as JSON object
+     * @return Status code and appropriate message as JSON object
+     */
+    public JsonObject revokeConsent(ExecutionContext context, JsonObject consentData) {
+        String user;
+        JsonObject response = new JsonObject();
+        try {
+            user = getUserId((UserAgent) context.getMainAgent());
+        } catch (Exception e) {
+            log.printStackTrace(e);
+            response.addProperty("status", 400);
+            response.addProperty("msg", "Could not get user agent. Are you logged in?");
+            return response;
+        }
+
+        Consent consentObj = createConsentObj(user, consentData);
+        if (consentObj == null)
+        {
+            response.addProperty("status", 400);
+            response.addProperty("msg", "Invalid consent data.");
+            return response;
+        }
+
+        try {
+            consentRegistry.revokeConsent(Util.soliditySha3(consentObj.toString())).sendAsync().get();
+        } catch (Exception e) {
+            log.printStackTrace(e);
+            response.addProperty("status", 500);
+            response.addProperty("msg", "Error in blockchain communication.");
+            return response;
+        }
+
+        log.info("Consent revoked by user " + user);
+        response.addProperty("status", 200);
+        response.addProperty("msg", consentObj.toString());
         return response;
     }
 }

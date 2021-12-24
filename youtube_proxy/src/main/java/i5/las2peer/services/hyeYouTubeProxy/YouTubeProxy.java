@@ -15,6 +15,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
 import i5.las2peer.api.Context;
+import i5.las2peer.api.security.UserAgent;
 import i5.las2peer.execution.ExecutionContext;
 import i5.las2peer.logging.L2pLogger;
 import i5.las2peer.api.ManualDeployment;
@@ -89,9 +90,6 @@ public class YouTubeProxy extends RESTService {
 		setFieldValues();
 		log.info("Got properties: debug = " + debug + ", cookieFile = " + cookieFile + ", headerFile = " +
 				headerFile + ", consentRegistryAddress = " + consentRegistryAddress);
-//		Cannot access logger of class instance before instance is created...
-//		if (debug)
-//			log.setLevel(Level.ALL);
 		if (browser == null) {
 			Playwright playwright = Playwright.create();
 			browser = playwright.chromium().launch();
@@ -161,7 +159,7 @@ public class YouTubeProxy extends RESTService {
 					message = "OK") })
 	public Response getMainPage() {
 		if (!initialized)
-			return Response.serverError().entity("Service not initialized").build();
+			return Response.serverError().entity("Service not initialized!").build();
 
 		ExecutionContext l2pContext;
 		try {
@@ -176,8 +174,9 @@ public class YouTubeProxy extends RESTService {
 		BrowserContext context = browser.newContext();
 
 		try {
-			context.addCookies(idm.getCookies(l2pContext));
-			context.setExtraHTTPHeaders(idm.getHeaders(l2pContext));
+			context.addCookies(idm.getCookies(l2pContext, (UserAgent) l2pContext.getMainAgent(), ROOT_URI, true));
+			context.setExtraHTTPHeaders(idm.getHeaders(l2pContext, (UserAgent) l2pContext.getMainAgent(), ROOT_URI,
+					true));
 		} catch (Exception e) {
 			log.printStackTrace(e);
 			JsonObject response = new JsonObject();
@@ -226,7 +225,7 @@ public class YouTubeProxy extends RESTService {
 					message = "OK") })
 	public Response getAside(@QueryParam("v") String videoId) {
 		if (!initialized)
-			return Response.serverError().entity("Service not initialized").build();
+			return Response.serverError().entity("Service not initialized!").build();
 
 		if (videoId.length() == 0) {
 			JsonObject response = new JsonObject();
@@ -246,8 +245,9 @@ public class YouTubeProxy extends RESTService {
 		BrowserContext context = browser.newContext();
 
 		try {
-			context.addCookies(idm.getCookies(l2pContext));
-			context.setExtraHTTPHeaders(idm.getHeaders(l2pContext));
+			context.addCookies(idm.getCookies(l2pContext, (UserAgent) l2pContext.getMainAgent(), ROOT_URI, true));
+			context.setExtraHTTPHeaders(idm.getHeaders(l2pContext, (UserAgent) l2pContext.getMainAgent(), ROOT_URI,
+					true));
 		} catch (Exception e) {
 			log.printStackTrace(e);
 			JsonObject response = new JsonObject();
@@ -296,7 +296,7 @@ public class YouTubeProxy extends RESTService {
 					message = "OK") })
 	public Response getSearchResults(@QueryParam("search_query") String searchQuery) {
 		if (!initialized)
-			return Response.serverError().entity("Service not initialized").build();
+			return Response.serverError().entity("Service not initialized!").build();
 
 		if (searchQuery.length() == 0) {
 			JsonObject response = new JsonObject();
@@ -316,8 +316,9 @@ public class YouTubeProxy extends RESTService {
 		BrowserContext context = browser.newContext();
 
 		try {
-			context.addCookies(idm.getCookies(l2pContext));
-			context.setExtraHTTPHeaders(idm.getHeaders(l2pContext));
+			context.addCookies(idm.getCookies(l2pContext, (UserAgent) l2pContext.getMainAgent(), ROOT_URI, true));
+			context.setExtraHTTPHeaders(idm.getHeaders(l2pContext, (UserAgent) l2pContext.getMainAgent(), ROOT_URI,
+					true));
 		} catch (Exception e) {
 			log.printStackTrace(e);
 			JsonObject response = new JsonObject();
@@ -441,7 +442,7 @@ public class YouTubeProxy extends RESTService {
 					code = HttpURLConnection.HTTP_OK,
 					message = "OK") })
 	@ApiOperation(
-			value = "YouTube/Headers",
+			value = "YouTube/Consent",
 			notes = "{'reader': reader_id, 'requestUri': request_uri:, 'anonymous:' (true/false)}")
 	public Response updateConsent(String reqData) {
 		ExecutionContext context = null;
@@ -457,6 +458,41 @@ public class YouTubeProxy extends RESTService {
 			Response.status(400).entity("Malformed POST data.").build();
 		}
 		JsonObject response = idm.updateConsent(context, consentObj);
+		return Response.status(response.get("status").getAsInt()).entity(response.get("msg").getAsString()).build();
+	}
+
+	/**
+	 * Function to revoke user specific consent for the cookies associated with the storing user
+	 *
+	 * @param reqData The POST data necessary to create a consent object (reader, requestUri, and whether non-anonymous
+	 *                   access is granted)
+	 * @return Returns an HTTP response with plain text string content indicating whether revoking was successful or not
+	 */
+	@DELETE
+	@Path("/consent")
+	@Consumes(MediaType.APPLICATION_JSON)
+	@Produces(MediaType.TEXT_PLAIN)
+	@ApiResponses(
+			value = { @ApiResponse(
+					code = HttpURLConnection.HTTP_OK,
+					message = "OK") })
+	@ApiOperation(
+			value = "YouTube/Consent",
+			notes = "{'reader': reader_id, 'requestUri': request_uri:, 'anonymous:' (true/false)}")
+	public Response revokeConsent(String reqData) {
+		ExecutionContext context = null;
+		JsonObject consentObj = null;
+		try {
+			context = (ExecutionContext) Context.getCurrent();
+		} catch (Exception e) {
+			Response.status(401).entity("Could not get execution context. Are you logged in?").build();
+		}
+		try {
+			consentObj = ParserUtil.toJsonObject(reqData);
+		} catch (Exception e) {
+			Response.status(400).entity("Malformed POST data.").build();
+		}
+		JsonObject response = idm.revokeConsent(context, consentObj);
 		return Response.status(response.get("status").getAsInt()).entity(response.get("msg").getAsString()).build();
 	}
 }
