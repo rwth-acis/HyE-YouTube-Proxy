@@ -54,7 +54,7 @@ import com.microsoft.playwright.Playwright;
 @SwaggerDefinition(
 		info = @Info(
 				title = "YouTube Data Proxy",
-				version = "0.1.0",
+				version = "0.1.6",
 				description = "Part of How's your Experience. Used to obtain data from YouTube.",
 				termsOfService = "http://your-terms-of-service-url.com",
 				contact = @Contact(
@@ -68,7 +68,7 @@ import com.microsoft.playwright.Playwright;
 @ServicePath("/hye-youtube")
 public class YouTubeProxy extends RESTService {
 
-	private final String ROOT_URI = "http://localhost:8080/youtube";
+	private final String ROOT_URI = "http://localhost:8080/hye-youtube/";
 	private final String YOUTUBE_MAIN_PAGE = "https://www.youtube.com/";
 	private final String YOUTUBE_VIDEO_PAGE = YOUTUBE_MAIN_PAGE + "watch?v=";
 	private final String YOUTUBE_RESULTS_PAGE = YOUTUBE_MAIN_PAGE + "results?search_query=";
@@ -134,6 +134,8 @@ public class YouTubeProxy extends RESTService {
 
 		if (debug.equals("true"))
 			log.setLevel(Level.ALL);
+		else
+			log.setLevel(Level.WARNING);
 
 		log.info("Initializing service...");
 		initialized = idm.initialize((ExecutionContext) Context.getCurrent(), consentRegistryAddress);

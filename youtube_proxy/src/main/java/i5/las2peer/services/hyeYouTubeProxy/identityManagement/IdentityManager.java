@@ -291,8 +291,10 @@ public class IdentityManager {
      */
     public ArrayList<Cookie> getCookies(ExecutionContext context, UserAgent owner, String reqUri, boolean anon) {
         // If cookies were parsed from a static file, return this
-        if (this.cookies != null && !this.cookies.isEmpty())
+        if (this.cookies != null && !this.cookies.isEmpty()) {
+            System.out.println("Using cookies from file");
             return this.cookies;
+        }
 
         // Else retrieve cookies from las2peer storage
         try {
@@ -301,11 +303,14 @@ public class IdentityManager {
 
             // Make sure that user has the proper permissions to use the cookie for the specified request
             if (!checkConsent(new Consent(getUserId(owner), getUserId((UserAgent) context.getMainAgent()), reqUri,
-                    anon)))
+                    anon))) {
+                System.out.println("Lacking consent");
                 return null;
+            }
+            System.out.println("Got cookies:\n" + cookieEnvelope.getContent().toString());
             return JsonStringToCookieArray(cookieEnvelope.getContent().toString());
         } catch (Exception e) {
-            log.printStackTrace(e);
+            e.printStackTrace();
             return null;
         }
     }
@@ -321,8 +326,10 @@ public class IdentityManager {
      */
     public HashMap<String, String> getHeaders(ExecutionContext context, UserAgent owner, String reqUri, boolean anon) {
         // If headers were parsed from a static file, return this
-        if (this.headers != null && !this.headers.isEmpty())
+        if (this.headers != null && !this.headers.isEmpty()) {
+            log.info("Using headers from file");
             return this.headers;
+        }
 
         // Else retrieve headers from local storage
         try {
@@ -331,8 +338,10 @@ public class IdentityManager {
 
             // Make sure that user has the proper permissions to use the headers for the specified request
             if (!checkConsent(new Consent(getUserId(owner), getUserId((UserAgent) context.getMainAgent()), reqUri,
-                    anon)))
+                    anon))) {
+                log.info("Lacking consent");
                 return null;
+            }
             return ParserUtil.jsonToMap(ParserUtil.toJsonObject(headerEnvelope.getContent().toString()));
         } catch (Exception e) {
             log.printStackTrace(e);
@@ -492,11 +501,12 @@ public class IdentityManager {
      * @return Status code and appropriate message as JSON object
      */
     private boolean checkConsent(Consent consentObj) {
+        System.out.println("Checking for consent " + consentObj.toString());
         try {
             return consentRegistry.hashExists(Util.soliditySha3(consentObj.toString())).sendAsync().get();
         } catch (Exception e) {
-            log.severe("Error while checking consent.");
-            log.printStackTrace(e);
+            System.out.println("Error while checking consent.");
+            e.printStackTrace();
             return false;
         }
     }
