@@ -37,6 +37,7 @@ public class IdentityManager {
     private final String HEADER_SUFFIX = "_headers";
     private final String YOUTUBE_COOKIE_DOMAIN = ".youtube.com";
     private final String YOUTUBE_COOKIE_PATH = "/";
+    private final String PERMISSION_TABLE = "hyePermissionTable";
 
     // Constructor setting up storage
     public IdentityManager(String cookieFile, String headerFile) {
@@ -53,13 +54,53 @@ public class IdentityManager {
         }
     }
 
+    /**
+     * Helper function which either fetches or creates an envelope with the given handle
+     *
+     * @param context The current execution context required to access the user's local storage
+     * @param handle The handle associated with the envelope in question
+     * @return The requested las2peer envelope objet
+     */
+    private Envelope getEnvelope(Context context, String handle) {
+        Envelope env;
+
+        // See whether envelope already exists
+        try {
+            env = context.requestEnvelope(handle);
+            return env;
+        } catch (Exception e) {
+            // Envelope does not exist
+            env = null;
+        }
+
+        // Else create envelope
+        try {
+            env = context.createEnvelope(handle);
+        } catch (Exception e) {
+            env = null;
+        }
+        return env;
+    }
+
+    /**
+     * Initialize smart contracts
+     *
+     * @param context Current execution context from which the method is called
+     * @param consentRegistryAddress The blockchain address where the consent registry contracts are stored
+     * @return Whether initialization was successful
+     */
     public boolean initialize(ExecutionContext context, String consentRegistryAddress) {
         try {
             ServiceAgentImpl agent = (ServiceAgentImpl) context.getServiceAgent();
             registryClient = ((EthereumNode) agent.getRunningAtNode()).getRegistryClient();
             consentRegistry = registryClient.loadSmartContract(ConsentRegistry.class, consentRegistryAddress);
+
+            // Create empty table for permissions
+            Envelope permissionsEnv = context.createEnvelope(PERMISSION_TABLE, context.getServiceAgent());
+            permissionsEnv.setContent(new HashMap<String, HashSet<String>>());
+            context.storeEnvelope(permissionsEnv, context.getServiceAgent());
         } catch (Exception e) {
-            log.warning("Initialization of smart contracts failed!");
+            log.warning("Initialization failed!");
             log.printStackTrace(e);
             return false;
         }
@@ -131,7 +172,9 @@ public class IdentityManager {
      * @param user The User Agent whose YouTube ID we are interested in
      * @return The YouTube ID linked to the given user
      */
-    private String getUserId(UserAgent user) {
+    public String getUserId(UserAgent user) {
+        if (user == null)
+            return "";
         return user.getIdentifier();
     }
 
@@ -142,7 +185,7 @@ public class IdentityManager {
      * @param handle The current las2peer ID of the user in question
      * @return The requested las2peer user agent or null if there was an issue
      */
-    private UserAgent getUserAgent(Context context, String handle) {
+    public UserAgent getUserAgent(Context context, String handle) {
         UserAgent user;
         try {
             user = (UserAgent) context.fetchAgent(handle);
@@ -156,21 +199,27 @@ public class IdentityManager {
     /**
      * Retrieve the handle used to store cookies for the given user
      *
-     * @param user The User Agent whose YouTube cookies are getting stored/fetched
+     * @param userId The User ID of the agent whose YouTube cookies are getting stored/fetched
      * @return The identifier used to store/fetch the given user's cookies
      */
+    private String getCookieHandle(String userId) {
+        return userId + COOKIE_SUFFIX;
+    }
     private String getCookieHandle(UserAgent user) {
-        return getUserId(user) + COOKIE_SUFFIX;
+        return getCookieHandle(getUserId(user));
     }
 
     /**
      * Retrieve the handle used to store headers for the given user
      *
-     * @param user The User Agent whose HTTP headers are getting stored/fetched
+     * @param userId The User ID of the agent whose HTTP headers are getting stored/fetched
      * @return The identifier used to store/fetch the given user's headers
      */
+    private String getHeaderHandle(String userId) {
+        return userId + HEADER_SUFFIX;
+    }
     private String getHeaderHandle(UserAgent user) {
-        return getUserId(user) + HEADER_SUFFIX;
+        return getHeaderHandle(getUserId(user));
     }
 
     /**
@@ -236,34 +285,6 @@ public class IdentityManager {
     }
 
     /**
-     * Helper function which either fetches or creates an envelope with the given handle
-     *
-     * @param context The current execution context required to access the user's local storage
-     * @param handle The handle associated with the envelope in question
-     * @return The requested las2peer envelope objet
-     */
-    private Envelope getEnvelope(Context context, String handle) {
-        Envelope env;
-
-        // See whether envelope already exists
-        try {
-            env = context.requestEnvelope(handle);
-            return env;
-        } catch (Exception e) {
-            // Envelope does not exist
-            env = null;
-        }
-
-        // Else create envelope
-        try {
-            env = context.createEnvelope(handle);
-        } catch (Exception e) {
-            env = null;
-        }
-        return env;
-    }
-
-    /**
      * Helper function building a Consent object from the provided JSON data
      *
      * @param userId The user id of the owner of the consent object in question
@@ -284,33 +305,31 @@ public class IdentityManager {
      * Retrieve cookies for the given user
      *
      * @param context The current execution context required to fetch the cookies accessible to the current user
-     * @param owner The user whose cookies are requested
+     * @param ownerId The las2peer ID of the user whose cookies are requested
      * @param reqUri The request URI for which the cookies are requested
      * @oaram anon Whether the identity of the cookies' owner is known to the requesting user
      * @return Valid YouTube cookies stored for the requested user if requesting user has required permissions
      */
-    public ArrayList<Cookie> getCookies(ExecutionContext context, UserAgent owner, String reqUri, boolean anon) {
+        public ArrayList<Cookie> getCookies(ExecutionContext context, String ownerId, String reqUri, boolean anon) {
         // If cookies were parsed from a static file, return this
         if (this.cookies != null && !this.cookies.isEmpty()) {
-            System.out.println("Using cookies from file");
+            log.info("Using cookies from file");
             return this.cookies;
         }
 
         // Else retrieve cookies from las2peer storage
         try {
             // Check whether user is allowed to access the owner's cookies
-            Envelope cookieEnvelope = context.requestEnvelope(getCookieHandle(owner));
+            Envelope cookieEnvelope = context.requestEnvelope(getCookieHandle(ownerId));
 
             // Make sure that user has the proper permissions to use the cookie for the specified request
-            if (!checkConsent(new Consent(getUserId(owner), getUserId((UserAgent) context.getMainAgent()), reqUri,
-                    anon))) {
-                System.out.println("Lacking consent");
-                return null;
-            }
-            System.out.println("Got cookies:\n" + cookieEnvelope.getContent().toString());
+            if (ownerId != getUserId((UserAgent) context.getMainAgent()) &&
+                    !checkConsent(new Consent(ownerId, getUserId((UserAgent) context.getMainAgent()), reqUri, anon)))
+                return new ArrayList<Cookie>();
+
             return JsonStringToCookieArray(cookieEnvelope.getContent().toString());
         } catch (Exception e) {
-            e.printStackTrace();
+            log.printStackTrace(e);
             return null;
         }
     }
@@ -319,12 +338,12 @@ public class IdentityManager {
      * Retrieve HTTP headers for the given user
      *
      * @param context The current execution context required to fetch the cookies accessible to the current user
-     * @param owner The user whose cookies are requested
+     * @param ownerId The las2peer ID of the user whose cookies are requested
      * @param reqUri The request URI for which the cookies are requested
      * @oaram anon Whether the identity of the cookies' owner is known to the requesting user
      * @return Valid HTTP headers stored for that user
      */
-    public HashMap<String, String> getHeaders(ExecutionContext context, UserAgent owner, String reqUri, boolean anon) {
+    public HashMap<String, String> getHeaders(ExecutionContext context, String ownerId, String reqUri, boolean anon) {
         // If headers were parsed from a static file, return this
         if (this.headers != null && !this.headers.isEmpty()) {
             log.info("Using headers from file");
@@ -334,19 +353,84 @@ public class IdentityManager {
         // Else retrieve headers from local storage
         try {
             // Check whether user is allowed to access the owner's headers
-            Envelope headerEnvelope = context.requestEnvelope(getHeaderHandle(owner));
+            Envelope headerEnvelope = context.requestEnvelope(getHeaderHandle(ownerId));
 
             // Make sure that user has the proper permissions to use the headers for the specified request
-            if (!checkConsent(new Consent(getUserId(owner), getUserId((UserAgent) context.getMainAgent()), reqUri,
-                    anon))) {
-                log.info("Lacking consent");
-                return null;
-            }
+            if (ownerId != getUserId((UserAgent) context.getMainAgent()) &&
+                    !checkConsent(new Consent(ownerId, getUserId((UserAgent) context.getMainAgent()), reqUri, anon)))
+                return new HashMap<String, String>();
+
             return ParserUtil.jsonToMap(ParserUtil.toJsonObject(headerEnvelope.getContent().toString()));
         } catch (Exception e) {
             log.printStackTrace(e);
             return null;
         }
+    }
+
+    /**
+     * Store the given cookies for the current user and grants access to provided readers
+     *
+     * @param context The current execution context required to access the user's local storage
+     * @param cookies YouTube cookies
+     * @param readers Identifiers of las2peer users, allowed to access stored cookies
+     * @return Stored content as Json object or error message
+     */
+    public JsonObject storeCookies(ExecutionContext context, JsonArray cookies, ArrayList<String> readers) {
+        String ownerId;
+        JsonObject response = new JsonObject();
+        try {
+            ownerId = getUserId((UserAgent) context.getMainAgent());
+        } catch (Exception e) {
+            log.printStackTrace(e);
+            response.addProperty("status", 400);
+            response.addProperty("msg", "Could not get user agent. Are you logged in?");
+            return response;
+        }
+
+        JsonArray parsedCookies = parseCookiesFromJsonArray(cookies);
+        // TODO add test determining cookie validity (e.g., make request to YouTube and check whether user is logged in)
+
+        String responseMsg = "{'";
+        try {
+            String cookieHandle = getCookieHandle(ownerId);
+            Envelope cookieEnv = getEnvelope(context, cookieHandle);
+            Envelope permissionsEnv = context.requestEnvelope(PERMISSION_TABLE, context.getServiceAgent());
+            HashMap<String, HashSet<String>> permissionMap = (HashMap<String, HashSet<String>>)
+                    permissionsEnv.getContent();
+
+            responseMsg += cookieHandle + "': ";
+            String cookieData = parsedCookies.toString();
+            cookieEnv.setContent(cookieData);
+            responseMsg += cookieData + "}";
+
+            Iterator<String> it = readers.iterator();
+            while (it.hasNext()) {
+                String readerId = it.next();
+                UserAgent reader = getUserAgent(context, readerId);
+                if (reader != null) {
+                    // Update list of cookies, reader may access
+                    HashSet<String> permissionSet = permissionMap.get(readerId);
+                    permissionSet.add(ownerId);
+                    permissionMap.put(readerId, permissionSet);
+
+                    // Update readers of cookie envelope
+                    cookieEnv.addReader(reader);
+                }
+            }
+
+            permissionsEnv.setContent(permissionMap);
+            context.storeEnvelope(permissionsEnv, context.getServiceAgent());
+            context.storeEnvelope(cookieEnv);
+        } catch (Exception e) {
+            log.printStackTrace(e);
+            response.addProperty("status", 500);
+            response.addProperty("msg", "Error storing cookies.");
+            return response;
+        }
+        log.info("Cookies updated for user " + ownerId);
+        response.addProperty("status", 200);
+        response.addProperty("msg", responseMsg);
+        return response;
     }
 
     /**
@@ -358,10 +442,10 @@ public class IdentityManager {
      * @return Stored content as Json object or error message
      */
     public JsonObject storeHeaders(ExecutionContext context, JsonObject headers, ArrayList<String> readers) {
-        UserAgent user;
+        String userId;
         JsonObject response = new JsonObject();
         try {
-            user = (UserAgent) context.getMainAgent();
+            userId = getUserId((UserAgent) context.getMainAgent());
         } catch (Exception e) {
             log.printStackTrace(e);
             response.addProperty("status", 400);
@@ -371,7 +455,7 @@ public class IdentityManager {
 
         String responseMsg = "{'";
         try {
-            String headerHandle = getHeaderHandle(user);
+            String headerHandle = getHeaderHandle(userId);
             Envelope headerEnvelope = getEnvelope(context, headerHandle);
 
             responseMsg += headerHandle + "': ";
@@ -393,63 +477,27 @@ public class IdentityManager {
             response.addProperty("msg", "Error storing headers.");
             return response;
         }
-        log.info("Headers updated for user " + getUserId(user));
+        log.info("Headers updated for user " + userId);
         response.addProperty("status", 200);
         response.addProperty("msg", responseMsg);
         return response;
     }
 
     /**
-     * Store the given cookies for the current user
+     * Function to see which cookies the current user is permitted to access
      *
-     * @param context The current execution context required to access the user's local storage
-     * @param cookies YouTube cookies
-     * @param readers Identifiers of las2peer users, allowed to access stored cookies
-     * @return Stored content as Json object or error message
+     * @param context Current execution context (including requesting user)
+     * @return Set of user IDs that permitted the current user to access their cookies
      */
-    public JsonObject storeCookies(ExecutionContext context, JsonArray cookies, ArrayList<String> readers) {
-        UserAgent user;
-        JsonObject response = new JsonObject();
+    public HashSet<String> getPermissions(ExecutionContext context) {
         try {
-            user = (UserAgent) context.getMainAgent();
+            HashMap<String, HashSet<String>> permissionMap = (HashMap<String, HashSet<String>>) context.requestEnvelope(
+                    PERMISSION_TABLE,  context.getServiceAgent()).getContent();
+            return permissionMap.get(getUserId((UserAgent) context.getMainAgent()));
         } catch (Exception e) {
             log.printStackTrace(e);
-            response.addProperty("status", 400);
-            response.addProperty("msg", "Could not get user agent. Are you logged in?");
-            return response;
+            return null;
         }
-
-        JsonArray parsedCookies = parseCookiesFromJsonArray(cookies);
-        // TODO add test determining cookie validity (e.g., make request to YouTube and check whether user is logged in)
-
-        String responseMsg = "{'";
-        try {
-            String cookieHandle = getCookieHandle(user);
-            Envelope cookieEnvelope = getEnvelope(context, cookieHandle);
-
-            responseMsg += cookieHandle + "': ";
-            String cookieData = parsedCookies.toString();
-            cookieEnvelope.setContent(cookieData);
-            responseMsg += cookieData + "}";
-
-            Iterator<String> it = readers.iterator();
-            while (it.hasNext()) {
-                UserAgent reader = getUserAgent(context, it.next());
-                if (reader != null)
-                    cookieEnvelope.addReader(reader);
-            }
-
-            context.storeEnvelope(cookieEnvelope);
-        } catch (Exception e) {
-            log.printStackTrace(e);
-            response.addProperty("status", 500);
-            response.addProperty("msg", "Error storing cookies.");
-            return response;
-        }
-        log.info("Cookies updated for user " + getUserId(user));
-        response.addProperty("status", 200);
-        response.addProperty("msg", responseMsg);
-        return response;
     }
 
     /**
@@ -501,12 +549,11 @@ public class IdentityManager {
      * @return Status code and appropriate message as JSON object
      */
     private boolean checkConsent(Consent consentObj) {
-        System.out.println("Checking for consent " + consentObj.toString());
         try {
             return consentRegistry.hashExists(Util.soliditySha3(consentObj.toString())).sendAsync().get();
         } catch (Exception e) {
-            System.out.println("Error while checking consent.");
-            e.printStackTrace();
+            log.severe("Error while checking consent.");
+            log.printStackTrace(e);
             return false;
         }
     }

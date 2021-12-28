@@ -22,7 +22,12 @@ contract ConsentRegistry {
 
     // If no consent has been stored before, consent is stored
     function storeConsent(bytes32 consentHash) public {
-        _createConsent(Consent(consentHash, now, true));
+        if (hashExists(consentHash)) {
+            hashToConsent[consentHash].revoked = false;
+            hashToConsent[consentHash].timestamp = now;
+        } else {
+            _createConsent(Consent(consentHash, now, true));
+        }
     }
 
     // Stores consent Object in mapping
@@ -30,9 +35,10 @@ contract ConsentRegistry {
         consentStorage.push(consent);
     }
 
-    // Sets the revoked attribute of the given hash to false
+    // Sets the revoked attribute of the given hash to false and updates timestamp
     function revokeConsent(bytes32 consentHash) public {
         if (!hashExists(consentHash)) revert("Provided consent hash not found on chain.");
-        _createConsent(Consent(consentHash, now, false));
+        hashToConsent[consentHash].revoked = true;
+        hashToConsent[consentHash].timestamp = now;
     }
 }
