@@ -56,7 +56,7 @@ import com.microsoft.playwright.Playwright;
 @SwaggerDefinition(
 		info = @Info(
 				title = "YouTube Data Proxy",
-				version = "0.1.8",
+				version = "0.1.9",
 				description = "Part of How's your Experience. Used to obtain data from YouTube.",
 				termsOfService = "http://your-terms-of-service-url.com",
 				contact = @Contact(
@@ -177,11 +177,12 @@ public class YouTubeProxy extends RESTService {
 		}
 
 		// Get cookies (and headers) of appropriate user
-		if (ownerId.length() == 0)
+		boolean anon = (ownerId == null || ownerId.length() == 0);
+		if (anon)
 			ownerId = findMatch(l2pContext, request);
 
-		ArrayList<Cookie> cookies = idm.getCookies(l2pContext, ownerId, request, ownerId.length() > 0);
-		HashMap<String, String> headers = idm.getHeaders(l2pContext, ownerId, request, ownerId.length() > 0);
+		ArrayList<Cookie> cookies = idm.getCookies(l2pContext, ownerId, request, anon);
+		HashMap<String, String> headers = idm.getHeaders(l2pContext, ownerId, request, anon);
 
 		if (cookies == null) {
 			response.addProperty("500", "Could not retrieve cookies.");
@@ -321,7 +322,7 @@ public class YouTubeProxy extends RESTService {
 			return Response.serverError().entity(response.toString()).build();
 		}
 
-		if (videoId.length() == 0) {
+		if (videoId == null || videoId.length() == 0) {
 			response.addProperty("400", "Missing video Id.");
 			return Response.status(400).entity(response.toString()).build();
 		}
@@ -383,7 +384,7 @@ public class YouTubeProxy extends RESTService {
 			return Response.serverError().entity(response.toString()).build();
 		}
 
-		if (searchQuery.length() == 0) {
+		if (searchQuery == null || searchQuery.length() == 0) {
 			response.addProperty("400", "Missing search query.");
 			return Response.status(400).entity(response.toString()).build();
 		}

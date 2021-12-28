@@ -323,11 +323,11 @@ public class IdentityManager {
             Envelope cookieEnvelope = context.requestEnvelope(getCookieHandle(ownerId));
 
             // Make sure that user has the proper permissions to use the cookie for the specified request
-            if (ownerId != getUserId((UserAgent) context.getMainAgent()) &&
-                    !checkConsent(new Consent(ownerId, getUserId((UserAgent) context.getMainAgent()), reqUri, anon)))
-                return new ArrayList<Cookie>();
+            if (ownerId == getUserId((UserAgent) context.getMainAgent()) ||
+                    checkConsent(new Consent(ownerId, getUserId((UserAgent) context.getMainAgent()), reqUri, anon)))
+                return JsonStringToCookieArray(cookieEnvelope.getContent().toString());
 
-            return JsonStringToCookieArray(cookieEnvelope.getContent().toString());
+            return new ArrayList<Cookie>();
         } catch (Exception e) {
             log.printStackTrace(e);
             return null;
@@ -356,11 +356,11 @@ public class IdentityManager {
             Envelope headerEnvelope = context.requestEnvelope(getHeaderHandle(ownerId));
 
             // Make sure that user has the proper permissions to use the headers for the specified request
-            if (ownerId != getUserId((UserAgent) context.getMainAgent()) &&
-                    !checkConsent(new Consent(ownerId, getUserId((UserAgent) context.getMainAgent()), reqUri, anon)))
-                return new HashMap<String, String>();
+            if (ownerId == getUserId((UserAgent) context.getMainAgent()) ||
+                    checkConsent(new Consent(ownerId, getUserId((UserAgent) context.getMainAgent()), reqUri, anon)))
+                return ParserUtil.jsonToMap(ParserUtil.toJsonObject(headerEnvelope.getContent().toString()));
 
-            return ParserUtil.jsonToMap(ParserUtil.toJsonObject(headerEnvelope.getContent().toString()));
+            return new HashMap<String, String>();
         } catch (Exception e) {
             log.printStackTrace(e);
             return null;
@@ -410,6 +410,8 @@ public class IdentityManager {
                 if (reader != null) {
                     // Update list of cookies, reader may access
                     HashSet<String> permissionSet = permissionMap.get(readerId);
+                    if (permissionSet == null)
+                        permissionSet = new HashSet<String>();
                     permissionSet.add(ownerId);
                     permissionMap.put(readerId, permissionSet);
 

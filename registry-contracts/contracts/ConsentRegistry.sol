@@ -14,9 +14,9 @@ contract ConsentRegistry {
     function hashExists(bytes32 consentHash) public view returns(bool){
         Consent storage consentObj = hashToConsent[consentHash];
         if (consentObj.timestamp != 0 && consentObj.revoked != true) {
-            return false;
-        } else {
             return true;
+        } else {
+            return false;
         }
     }
 
