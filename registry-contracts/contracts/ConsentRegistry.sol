@@ -22,12 +22,7 @@ contract ConsentRegistry {
 
     // If no consent has been stored before, consent is stored
     function storeConsent(bytes32 consentHash) public {
-        if (hashExists(consentHash)) {
-            hashToConsent[consentHash].revoked = false;
-            hashToConsent[consentHash].timestamp = now;
-        } else {
-            _createConsent(Consent(consentHash, now, true));
-        }
+        _createConsent(Consent(consentHash, now, true));
     }
 
     // Stores consent Object in mapping

@@ -27,12 +27,12 @@ public abstract class YouTubeParser {
 
     // Helper function used to find the given object key in the given html code and convert its value into a Json object
     private static JsonObject getMainObject(String html, String mainObjKey) {
-        int htmlLenght = html.length();
+        int htmlLength = html.length();
         String buffer = "";
         int pos;
 
         // Try to find given object key
-        for (pos = 0; pos < htmlLenght; ++pos) {
+        for (pos = 0; pos < htmlLength; ++pos) {
             if (html.charAt(pos) == mainObjKey.charAt(buffer.length())) {
                 buffer += html.charAt(pos);
                 if (buffer.equals(mainObjKey))
@@ -53,7 +53,7 @@ public abstract class YouTubeParser {
         // Write the object into the buffer
         int bracketCount = 1;
         buffer = "{";
-        while (bracketCount > 0 && pos < htmlLenght) {
+        while (bracketCount > 0 && pos < htmlLength) {
             ++pos;
             if (html.charAt(pos) == '{')
                 ++bracketCount;

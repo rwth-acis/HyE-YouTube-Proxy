@@ -1,5 +1,8 @@
 package i5.las2peer.services.hyeYouTubeProxy.identityManagement;
 
+import com.google.gson.JsonObject;
+import io.swagger.util.Json;
+
 /**
  * Consent
  *
@@ -27,22 +30,47 @@ public class Consent {
         formattedOutput = formatStringOutput();
     }
 
+    public Consent(Consent consent)
+    {
+        this.ownerId = consent.getOwnerId();
+        this.readerId = consent.getReaderId();
+        // this.identifierHash = consent.getidentifierHash();
+        this.requestUri = consent.getRequestUri();
+        this.anon = consent.getAnon();
+        formattedOutput = formatStringOutput();
+    }
+
+    public Consent(JsonObject json)
+    {
+        if (json.has("owner"))
+            this.ownerId = json.get("owner").getAsString();
+        if (json.has("reader"))
+            this.readerId = json.get("reader").getAsString();
+        if (json.has("request"))
+            this.requestUri = json.get("request").getAsString();
+        if (json.has("anon"))
+            this.anon = json.get("anon").getAsBoolean();
+        formattedOutput = formatStringOutput();
+    }
+
     public String getOwnerId() {
         return ownerId;
     }
 
-    public void setOwnerId(String ownerId) {
+    public Consent setOwnerId(String ownerId) {
         this.ownerId = ownerId;
         formattedOutput = formatStringOutput();
+        return this;
     }
 
     public String getReaderId() {
         return readerId;
     }
 
-    public void setReaderId(String readerId) {
+    public Consent setReaderId(String readerId) {
         this.readerId = readerId;
         formattedOutput = formatStringOutput();
+        return this;
     }
 
     //    public String getIdentifierHash() {
@@ -58,18 +86,20 @@ public class Consent {
         return requestUri;
     }
 
-    public void setRequestUri(String requestUri) {
+    public Consent setRequestUri(String requestUri) {
         this.requestUri = requestUri;
         formattedOutput = formatStringOutput();
+        return this;
     }
 
-    public boolean isAnon() {
+    public boolean getAnon() {
         return anon;
     }
 
-    public void setAnon(boolean anon) {
+    public Consent setAnon(boolean anon) {
         this.anon = anon;
         formattedOutput = formatStringOutput();
+        return this;
     }
 
     private String formatStringOutput() {
@@ -83,5 +113,14 @@ public class Consent {
     @Override
     public String toString() {
         return formattedOutput;
+    }
+
+    public JsonObject toJson() {
+        JsonObject result = new JsonObject();
+        result.addProperty("owner", ownerId);
+        result.addProperty("reader", readerId);
+        result.addProperty("request", requestUri);
+        result.addProperty("anonymous", anon);
+        return result;
     }
 }

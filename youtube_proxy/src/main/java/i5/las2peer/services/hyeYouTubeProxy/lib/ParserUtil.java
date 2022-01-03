@@ -5,10 +5,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
-import java.util.HashMap;
-import java.util.Set;
-import java.util.ArrayList;
-import java.util.Iterator;
+import java.util.*;
 
 public abstract class ParserUtil {
 
