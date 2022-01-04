@@ -3,14 +3,19 @@ package i5.las2peer.services.hyeYouTubeProxy.identityManagement;
 import java.math.BigInteger;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
+import java.util.concurrent.Callable;
 import org.web3j.abi.TypeReference;
 import org.web3j.abi.datatypes.Bool;
 import org.web3j.abi.datatypes.Function;
 import org.web3j.abi.datatypes.Type;
+import org.web3j.abi.datatypes.generated.Bytes32;
+import org.web3j.abi.datatypes.generated.Uint256;
 import org.web3j.crypto.Credentials;
 import org.web3j.protocol.Web3j;
 import org.web3j.protocol.core.RemoteCall;
 import org.web3j.protocol.core.methods.response.TransactionReceipt;
+import org.web3j.tuples.generated.Tuple3;
 import org.web3j.tx.Contract;
 import org.web3j.tx.TransactionManager;
 import org.web3j.tx.gas.ContractGasProvider;
@@ -25,9 +30,11 @@ import org.web3j.tx.gas.ContractGasProvider;
  * <p>Generated with web3j version 4.0.1.
  */
 public class ConsentRegistry extends Contract {
-    private static final String BINARY = "608060405234801561001057600080fd5b50610283806100206000396000f3fe608060405234801561001057600080fd5b50600436106100415760003560e01c806307a0315d14610046578063b535b5c314610065578063d1211e4c14610096575b600080fd5b6100636004803603602081101561005c57600080fd5b50356100b3565b005b6100826004803603602081101561007b57600080fd5b5035610120565b604080519115158252519081900360200190f35b610063600480360360208110156100ac57600080fd5b5035610166565b6100bc81610120565b6100f75760405162461bcd60e51b81526004018080602001828103825260298152602001806102266029913960400191505060405180910390fd5b61011d604051806060016040528083815260200142815260200160011515815250610188565b50565b60008181526001602081905260408220908101541580159061014c5750600281015460ff161515600114155b1561015b576001915050610161565b60009150505b919050565b61011d6040518060600160405280838152602001428152602001600015158152505b6000805460018101825590805281517f290decd9548b62a8d60345a988386fc84ba6bc95484008f6362f93160ef3e56360039092029182015560208201517f290decd9548b62a8d60345a988386fc84ba6bc95484008f6362f93160ef3e5648201556040909101517f290decd9548b62a8d60345a988386fc84ba6bc95484008f6362f93160ef3e565909101805460ff191691151591909117905556fe50726f766964656420636f6e73656e742068617368206e6f7420666f756e64206f6e20636861696e2ea265627a7a7231582062a8ef542e3750f9e7a3a4378644b8e460f85d4eabb98dd6520d4ef7e4f68bf764736f6c63430005100032";
+    private static final String BINARY = "608060405234801561001057600080fd5b50610224806100206000396000f3fe608060405234801561001057600080fd5b506004361061004c5760003560e01c806307a0315d14610051578063b535b5c314610070578063d1211e4c146100a1578063e42cbab2146100be575b600080fd5b61006e6004803603602081101561006757600080fd5b50356100fb565b005b61008d6004803603602081101561008657600080fd5b5035610169565b604080519115158252519081900360200190f35b61006e600480360360208110156100b757600080fd5b5035610181565b6100db600480360360208110156100d457600080fd5b50356101a2565b604080519384526020840192909252151582820152519081900360600190f35b61010481610169565b61013f5760405162461bcd60e51b81526004018080602001828103825260298152602001806101c76029913960400191505060405180910390fd5b6000908152602081905260409020426001808301919091556002909101805460ff19169091179055565b60009081526020819052604090206002015460ff1690565b6000908152602081905260409020426001820155600201805460ff19169055565b60006020819052908152604090208054600182015460029092015490919060ff168356fe50726f766964656420636f6e73656e742068617368206e6f7420666f756e64206f6e20636861696e2ea265627a7a723158203f257083430a20299e16eae9181c6437e72030d01e9a5649b1cf78dbed77521b64736f6c63430005100032";
 
     public static final String FUNC_HASHEXISTS = "hashExists";
+
+    public static final String FUNC_HASHTOCONSENT = "hashToConsent";
 
     public static final String FUNC_REVOKECONSENT = "revokeConsent";
 
@@ -56,6 +63,23 @@ public class ConsentRegistry extends Contract {
                 Arrays.<Type>asList(new org.web3j.abi.datatypes.generated.Bytes32(consentHash)), 
                 Arrays.<TypeReference<?>>asList(new TypeReference<Bool>() {}));
         return executeRemoteCallSingleValueReturn(function, Boolean.class);
+    }
+
+    public RemoteCall<Tuple3<byte[], BigInteger, Boolean>> hashToConsent(byte[] param0) {
+        final Function function = new Function(FUNC_HASHTOCONSENT, 
+                Arrays.<Type>asList(new org.web3j.abi.datatypes.generated.Bytes32(param0)), 
+                Arrays.<TypeReference<?>>asList(new TypeReference<Bytes32>() {}, new TypeReference<Uint256>() {}, new TypeReference<Bool>() {}));
+        return new RemoteCall<Tuple3<byte[], BigInteger, Boolean>>(
+                new Callable<Tuple3<byte[], BigInteger, Boolean>>() {
+                    @Override
+                    public Tuple3<byte[], BigInteger, Boolean> call() throws Exception {
+                        List<Type> results = executeCallMultipleValueReturn(function);
+                        return new Tuple3<byte[], BigInteger, Boolean>(
+                                (byte[]) results.get(0).getValue(), 
+                                (BigInteger) results.get(1).getValue(), 
+                                (Boolean) results.get(2).getValue());
+                    }
+                });
     }
 
     public RemoteCall<TransactionReceipt> revokeConsent(byte[] consentHash) {

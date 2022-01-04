@@ -8,32 +8,23 @@ contract ConsentRegistry {
         bool revoked;
     }
 
-    Consent[] consentStorage;
-    mapping(bytes32 => Consent) hashToConsent;
+    mapping(bytes32 => Consent) public hashToConsent;
 
     // Checks whether the given hash was ever stored to the blockchain and was not yet revoked
-    function hashExists(bytes32 consentHash) public view returns(bool){
-        Consent storage consentObj = hashToConsent[consentHash];
-        if (consentObj.timestamp != 0 && consentObj.revoked != true) {
-            return true;
-        } else {
-            return false;
-        }
+    function hashExists(bytes32 consentHash) public view returns(bool) {
+        return hashToConsent[consentHash].revoked;
     }
 
     // If no consent has been stored before, consent is stored
     function storeConsent(bytes32 consentHash) public {
-        _createConsent(Consent(consentHash, now, false));
-    }
-
-    // Stores consent Object in mapping
-    function _createConsent(Consent memory consent) private {
-        consentStorage.push(consent);
+        hashToConsent[consentHash].timestamp = now;
+        hashToConsent[consentHash].revoked = false;
     }
 
     // Sets the revoked attribute of the given hash to false
     function revokeConsent(bytes32 consentHash) public {
         if (!hashExists(consentHash)) revert("Provided consent hash not found on chain.");
-        _createConsent(Consent(consentHash, now, true));
+        hashToConsent[consentHash].timestamp = now;
+        hashToConsent[consentHash].revoked = true;
     }
 }
