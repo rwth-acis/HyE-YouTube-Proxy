@@ -1,3 +1,4 @@
+
 pragma solidity ^0.5.0;
 
 contract ConsentRegistry {
@@ -7,28 +8,32 @@ contract ConsentRegistry {
         bool revoked;
     }
 
+    Consent[] consentStorage;
     mapping(bytes32 => Consent) hashToConsent;
 
     // Checks whether the given hash was ever stored to the blockchain and was not yet revoked
-    function hashExists(bytes32 consentHash) public view returns(bool) {
+    function hashExists(bytes32 consentHash) public view returns(bool){
         Consent storage consentObj = hashToConsent[consentHash];
-        if (consentObj.timestamp == 0) {
-            return false;
+        if (consentObj.timestamp != 0 && consentObj.revoked != true) {
+            return true;
         } else {
-            return consentObj.revoked;
+            return false;
         }
     }
 
-    // Store consent on blockchain with current timestamp
+    // If no consent has been stored before, consent is stored
     function storeConsent(bytes32 consentHash) public {
-        hashToConsent[consentHash].revoked = false;
-        hashToConsent[consentHash].timestamp = now;
+        _createConsent(Consent(consentHash, now, false));
     }
 
-    // Sets the revoked attribute of the given hash to false and updates timestamp
+    // Stores consent Object in mapping
+    function _createConsent(Consent memory consent) private {
+        consentStorage.push(consent);
+    }
+
+    // Sets the revoked attribute of the given hash to false
     function revokeConsent(bytes32 consentHash) public {
         if (!hashExists(consentHash)) revert("Provided consent hash not found on chain.");
-        hashToConsent[consentHash].revoked = true;
-        hashToConsent[consentHash].timestamp = now;
+        _createConsent(Consent(consentHash, now, true));
     }
 }

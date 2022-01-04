@@ -796,6 +796,12 @@ public class IdentityManager {
             byte[] consentHash = Util.soliditySha3(consentObj.toString());
             log.info("Revoking consent " + ParserUtil.bytesToHex(consentHash));
             consentRegistry.revokeConsent(consentHash).sendAsync().get();
+            // Consent for non-anonymous requests also entails consent for anonymous ones
+            if (!consentObj.getAnon()) {
+                consentHash = Util.soliditySha3(new Consent(consentObj).setAnon(true).toString());
+                log.info("Revoking consent " + ParserUtil.bytesToHex(consentHash));
+                consentRegistry.revokeConsent(consentHash).sendAsync().get();
+            }
         } catch (Exception e) {
             log.printStackTrace(e);
             response.addProperty("status", 500);
