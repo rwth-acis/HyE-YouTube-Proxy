@@ -56,7 +56,7 @@ import com.microsoft.playwright.Playwright;
 @SwaggerDefinition(
 		info = @Info(
 				title = "YouTube Data Proxy",
-				version = "0.1.11",
+				version = "0.1.12",
 				description = "Part of How's your Experience. Used to obtain data from YouTube.",
 				termsOfService = "http://your-terms-of-service-url.com",
 				contact = @Contact(
@@ -148,7 +148,7 @@ public class YouTubeProxy extends RESTService {
 
 		// If recommendation service isn't running, try to get random user
 		String userId = "";
-		if (candidates != null) {
+		if (candidates != null && candidates.size() > 0) {
 			Iterator<String> it = candidates.iterator();
 			int randPos = rand.nextInt(candidates.size());
 			while (it.hasNext() && randPos >= 0) {
@@ -526,7 +526,7 @@ public class YouTubeProxy extends RESTService {
 	 */
 	@GET
 	@Path("/consent")
-	@Produces(MediaType.TEXT_PLAIN)
+	@Produces(MediaType.APPLICATION_JSON)
 	@ApiResponses(
 			value = { @ApiResponse(
 					code = HttpURLConnection.HTTP_OK,
@@ -534,7 +534,7 @@ public class YouTubeProxy extends RESTService {
 	@ApiOperation(
 			value = "YouTube/Consent",
 			notes = "Returns user's consent settings")
-	public Response checkConsent() {
+	public Response getConsent() {
 		ExecutionContext context = null;
 		JsonObject consentObj = null;
 		JsonObject response = new JsonObject();
@@ -551,8 +551,7 @@ public class YouTubeProxy extends RESTService {
 		response = idm.getConsent(context);
 		if (response.get("status").getAsInt() == 200)
 			return Response.status(response.get("status").getAsInt()).entity(response.get("msg")).build();
-		else
-			return Response.status(response.get("status").getAsInt()).entity(response).build();
+		return Response.status(response.get("status").getAsInt()).entity(response).build();
 	}
 
 	/**

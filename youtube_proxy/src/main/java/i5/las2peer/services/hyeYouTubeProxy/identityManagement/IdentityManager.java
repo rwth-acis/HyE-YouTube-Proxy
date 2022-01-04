@@ -615,7 +615,15 @@ public class IdentityManager {
         try {
             byte[] consentHash = Util.soliditySha3(consentObj.toString());
             log.info("Checking for consent " + ParserUtil.bytesToHex(consentHash));
-            return consentRegistry.hashExists(consentHash).sendAsync().get();
+            boolean result = consentRegistry.hashExists(consentHash).sendAsync().get();
+
+            // Consent for non-anonymous requests also entails consent for anonymous ones
+            if (!result && !consentObj.getAnon()) {
+                consentHash = Util.soliditySha3(consentObj.setAnon(false).toString());
+                log.info("Checking for consent " + ParserUtil.bytesToHex(consentHash));
+                return consentRegistry.hashExists(consentHash).sendAsync().get();
+            }
+            return result;
         } catch (Exception e) {
             log.severe("Error while checking consent.");
             log.printStackTrace(e);
@@ -643,8 +651,7 @@ public class IdentityManager {
 
         try {
             Envelope consentEnv = context.requestEnvelope(getConsentHandle(userId));
-            // TODO: FIX
-            response.addProperty("msg", ParserUtil.toJsonString(new ArrayList<>((HashSet<String>)
+            response.add("msg", ParserUtil.toJsonArray(new ArrayList<>((HashSet<String>)
                     consentEnv.getContent())));
             response.addProperty("status", 200);
             return response;
@@ -688,12 +695,6 @@ public class IdentityManager {
             byte[] consentHash = Util.soliditySha3(consentObj.toString());
             log.info("Storing consent " + ParserUtil.bytesToHex(consentHash));
             consentRegistry.storeConsent(Util.soliditySha3(consentObj.toString())).sendAsync().get();
-            // Consent for non-anonymous requests also entails consent for anonymous ones
-            if (!consentObj.getAnon()) {
-                consentHash = Util.soliditySha3(new Consent(consentObj).setAnon(true).toString());
-                log.info("Storing consent " + ParserUtil.bytesToHex(consentHash));
-                consentRegistry.storeConsent(Util.soliditySha3(consentObj.toString())).sendAsync().get();
-            }
         } catch (Exception e) {
             log.printStackTrace(e);
             response.addProperty("status", 500);
@@ -796,12 +797,6 @@ public class IdentityManager {
             byte[] consentHash = Util.soliditySha3(consentObj.toString());
             log.info("Revoking consent " + ParserUtil.bytesToHex(consentHash));
             consentRegistry.revokeConsent(consentHash).sendAsync().get();
-            // Consent for non-anonymous requests also entails consent for anonymous ones
-            if (!consentObj.getAnon()) {
-                consentHash = Util.soliditySha3(new Consent(consentObj).setAnon(true).toString());
-                log.info("Revoking consent " + ParserUtil.bytesToHex(consentHash));
-                consentRegistry.revokeConsent(consentHash).sendAsync().get();
-            }
         } catch (Exception e) {
             log.printStackTrace(e);
             response.addProperty("status", 500);

@@ -22,9 +22,8 @@ public abstract class ParserUtil {
         return new Gson().fromJson(jsonString, JsonObject.class);
     }
 
-    public static JsonArray toJsonArray(String arrayString) {
-        return new Gson().fromJson(arrayString, JsonArray.class);
-    }
+    public static JsonArray toJsonArray(String arrayString) { return new Gson().fromJson(arrayString, JsonArray.class); }
+    public static JsonArray toJsonArray(ArrayList<?> arrayList) { return toJsonArray(toJsonString(arrayList)); }
 
     public static String toJsonString(ArrayList<?> arrayList) {
         return new Gson().toJson(arrayList);

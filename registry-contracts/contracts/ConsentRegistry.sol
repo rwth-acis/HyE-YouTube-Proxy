@@ -12,7 +12,11 @@ contract ConsentRegistry {
 
     // Checks whether the given hash was ever stored to the blockchain and was not yet revoked
     function hashExists(bytes32 consentHash) public view returns(bool) {
-        return hashToConsent[consentHash].revoked;
+        if (hashToConsent[consentHash].timestamp == 0 || hashToConsent[consentHash].revoked) {
+            return false;
+        } else {
+            return true;
+        }
     }
 
     // If no consent has been stored before, consent is stored
