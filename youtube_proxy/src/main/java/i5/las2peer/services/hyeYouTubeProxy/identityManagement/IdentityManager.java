@@ -613,8 +613,9 @@ public class IdentityManager {
      */
     private boolean checkConsent(Consent consentObj) {
         try {
-            log.info("Checking for consent " + consentObj.toString());
-            return consentRegistry.hashExists(Util.soliditySha3(consentObj.toString())).sendAsync().get();
+            byte[] consentHash = Util.soliditySha3(consentObj.toString());
+            log.info("Checking for consent " + ParserUtil.bytesToHex(consentHash));
+            return consentRegistry.hashExists(consentHash).sendAsync().get();
         } catch (Exception e) {
             log.severe("Error while checking consent.");
             log.printStackTrace(e);
@@ -684,13 +685,14 @@ public class IdentityManager {
 
         // Store consent to blockchain
         try {
+            byte[] consentHash = Util.soliditySha3(consentObj.toString());
+            log.info("Storing consent " + ParserUtil.bytesToHex(consentHash));
             consentRegistry.storeConsent(Util.soliditySha3(consentObj.toString())).sendAsync().get();
-            log.info("Storing consent " + consentObj.toString());
             // Consent for non-anonymous requests also entails consent for anonymous ones
             if (!consentObj.getAnon()) {
-                String consentCpy = new Consent(consentObj).setAnon(true).toString();
-                log.info("Storing consent " + consentCpy);
-                consentRegistry.storeConsent(Util.soliditySha3(consentCpy)).sendAsync().get();
+                consentHash = Util.soliditySha3(new Consent(consentObj).setAnon(true).toString());
+                log.info("Storing consent " + ParserUtil.bytesToHex(consentHash));
+                consentRegistry.storeConsent(Util.soliditySha3(consentObj.toString())).sendAsync().get();
             }
         } catch (Exception e) {
             log.printStackTrace(e);
@@ -791,7 +793,9 @@ public class IdentityManager {
 
         // Revoke consent from blockchain
         try {
-            consentRegistry.revokeConsent(Util.soliditySha3(consentObj.toString())).sendAsync().get();
+            byte[] consentHash = Util.soliditySha3(consentObj.toString());
+            log.info("Revoking consent " + ParserUtil.bytesToHex(consentHash));
+            consentRegistry.revokeConsent(consentHash).sendAsync().get();
         } catch (Exception e) {
             log.printStackTrace(e);
             response.addProperty("status", 500);

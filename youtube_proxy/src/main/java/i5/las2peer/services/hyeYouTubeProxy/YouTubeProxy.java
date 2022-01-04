@@ -522,11 +522,11 @@ public class YouTubeProxy extends RESTService {
 	/**
 	 * Function to obtain user specific consent for the cookies associated with the storing user
 	 *
-	 * @return Returns an HTTP response with plain text string content indicating whether updating was successful or not
+	 * @return Returns an HTTP response with user's consent options as plain text string content
 	 */
 	@GET
 	@Path("/consent")
-	@Produces(MediaType.APPLICATION_JSON)
+	@Produces(MediaType.TEXT_PLAIN)
 	@ApiResponses(
 			value = { @ApiResponse(
 					code = HttpURLConnection.HTTP_OK,
