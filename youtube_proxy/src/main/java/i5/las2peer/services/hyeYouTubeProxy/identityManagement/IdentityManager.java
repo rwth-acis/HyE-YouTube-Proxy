@@ -375,7 +375,7 @@ public class IdentityManager {
      * @oaram anon Whether the identity of the cookies' owner is known to the requesting user
      * @return Valid YouTube cookies stored for the requested user if requesting user has required permissions
      */
-        public ArrayList<Cookie> getCookies(ExecutionContext context, String ownerId, String reqUri, boolean anon) {
+    public ArrayList<Cookie> getCookies(ExecutionContext context, String ownerId, String reqUri, boolean anon) {
         // If cookies were parsed from a static file, return this
         if (this.cookies != null && !this.cookies.isEmpty()) {
             log.info("Using cookies from file");
@@ -393,6 +393,24 @@ public class IdentityManager {
                 return JsonStringToCookieArray(cookieEnvelope.getContent().toString());
 
             return new ArrayList<Cookie>();
+        } catch (Exception e) {
+            log.printStackTrace(e);
+            return null;
+        }
+    }
+
+    public JsonArray getCookiesAsJson(ExecutionContext context, String ownerId, String reqUri, boolean anon) {
+        try {
+            String userId = getUserId((UserAgent) context.getMainAgent());
+            // Check whether user is allowed to access the owner's cookies
+            Envelope cookieEnvelope = context.requestEnvelope(getCookieHandle(ownerId));
+
+            // Make sure that user has the proper permissions to use the cookie for the specified request
+            if (ownerId.equals(userId) || checkConsent(new Consent(ownerId, userId, reqUri, anon))) {
+                return ParserUtil.toJsonArray(cookieEnvelope.getContent().toString());
+            }
+
+            return new JsonArray();
         } catch (Exception e) {
             log.printStackTrace(e);
             return null;
@@ -421,11 +439,11 @@ public class IdentityManager {
         JsonArray parsedCookies = parseCookiesFromJsonArray(cookies);
         // TODO add test determining cookie validity (e.g., make request to YouTube and check whether user is logged in)
 
-        String responseMsg = "{'";
+        String responseMsg = "{\"";
         try {
             String cookieHandle = getCookieHandle(ownerId);
 
-            responseMsg += cookieHandle + "': ";
+            responseMsg += cookieHandle + "\": ";
             String cookieData = parsedCookies.toString();
             responseMsg += cookieData + "}";
 
@@ -563,11 +581,11 @@ public class IdentityManager {
             return response;
         }
 
-        String responseMsg = "{'";
+        String responseMsg = "{\"";
         try {
             String headerHandle = getHeaderHandle(userId);
 
-            responseMsg += headerHandle + "': ";
+            responseMsg += headerHandle + "\": ";
             String headerData = headers.toString();
             responseMsg += headerData + "}";
 
@@ -611,7 +629,7 @@ public class IdentityManager {
      * @param consentObj The specific consent options
      * @return Status code and appropriate message as JSON object
      */
-    private boolean checkConsent(Consent consentObj) {
+    public boolean checkConsent(Consent consentObj) {
         try {
             byte[] consentHash = Util.soliditySha3(consentObj.toString());
             log.info("Checking for consent " + ParserUtil.bytesToHex(consentHash));
@@ -651,16 +669,18 @@ public class IdentityManager {
 
         try {
             Envelope consentEnv = context.requestEnvelope(getConsentHandle(userId));
-            response.add("msg", ParserUtil.toJsonArray(new ArrayList<>((HashSet<String>)
-                    consentEnv.getContent())));
+            response.add("msg", ParserUtil.toJsonArray((HashSet<String>) consentEnv.getContent()));
             response.addProperty("status", 200);
+        } catch (i5.las2peer.api.persistency.EnvelopeNotFoundException e){
+            response.addProperty("status", 200);
+            response.addProperty("msg", "");
             return response;
         } catch (Exception e) {
             log.printStackTrace(e);
             response.addProperty("status", 500);
             response.addProperty("msg", "Error getting consent");
-            return response;
         }
+        return response;
     }
 
     /**
@@ -671,10 +691,10 @@ public class IdentityManager {
      * @return Status code and appropriate message as JSON object
      */
     public JsonObject updateConsent(ExecutionContext context, JsonObject consentData) {
-        String user;
+        String userId;
         JsonObject response = new JsonObject();
         try {
-            user = getUserId((UserAgent) context.getMainAgent());
+            userId = getUserId((UserAgent) context.getMainAgent());
         } catch (Exception e) {
             log.printStackTrace(e);
             response.addProperty("status", 400);
@@ -682,7 +702,7 @@ public class IdentityManager {
             return response;
         }
 
-        Consent consentObj = createConsentObj(user, consentData);
+        Consent consentObj = createConsentObj(userId, consentData);
         if (consentObj == null)
         {
             response.addProperty("status", 400);
@@ -704,7 +724,7 @@ public class IdentityManager {
 
         // Store consent in las2peer
         try {
-            Envelope consentEnv = getEnvelope(context, getConsentHandle(user), null);
+            Envelope consentEnv = getEnvelope(context, getConsentHandle(userId), null);
             HashSet<String> consents = (HashSet<String>) consentEnv.getContent();
             if (consents == null)
                 consents = new HashSet<String>();
@@ -718,48 +738,7 @@ public class IdentityManager {
             return response;
         }
 
-        // Update readers of cookie and header envelopes
-        try {
-            Envelope cookieEnv = context.requestEnvelope(getCookieHandle(user));
-            cookieEnv.addReader(getUserAgent(context, consentObj.getReaderId()));
-            context.storeEnvelope(cookieEnv);
-        } catch (Exception e) {
-            log.printStackTrace(e);
-            response.addProperty("status", 500);
-            response.addProperty("msg", "Could not grant access to cookies.");
-            return response;
-        }
-        try {
-            Envelope headerEnv = context.requestEnvelope(getHeaderHandle(user));
-            headerEnv.addReader(getUserAgent(context, consentObj.getReaderId()));
-            context.storeEnvelope(headerEnv);
-        } catch (Exception e) {
-            log.printStackTrace(e);
-            response.addProperty("status", 500);
-            response.addProperty("msg", "Could not grant access to headers.");
-            return response;
-        }
-
-        // Update list of cookies, reader may access
-        try {
-            Envelope permissionsEnv = context.requestEnvelope(getPermissionsHandle(context.getServiceAgent()),
-                    context.getServiceAgent());
-            HashMap<String, HashSet<String>> permissionMap = (HashMap<String, HashSet<String>>)
-                    permissionsEnv.getContent();
-            HashSet<String> permissionSet = permissionMap.get(consentObj.getReaderId());
-            if (permissionSet == null)
-                permissionSet = new HashSet<String>();
-            permissionSet.add(consentObj.getOwnerId());
-            permissionMap.put(consentObj.getReaderId(), permissionSet);
-            context.storeEnvelope(permissionsEnv, context.getServiceAgent());
-        } catch (Exception e) {
-            log.printStackTrace(e);
-            response.addProperty("status", 500);
-            response.addProperty("msg", "Error updating consent.");
-            return response;
-        }
-
-        log.info("Consent updated for user " + user);
+        log.info("Consent updated for user " + userId);
         response.addProperty("status", 200);
         response.addProperty("msg", consentObj.toString());
         return response;
@@ -823,6 +802,123 @@ public class IdentityManager {
         log.info("Consent revoked by user " + userId);
         response.addProperty("status", 200);
         response.addProperty("msg", consentObj.toString());
+        return response;
+    }
+
+    /**
+     * Adds the given users as readers of the current user
+     *
+     * @param context The current execution context required to access the user's local storage
+     * @param readerIds The IDs of the users to be added
+     * @return Status code and appropriate message as JSON object
+     */
+    public JsonObject addReader(ExecutionContext context, JsonArray readerIds) {
+        String ownerId;
+        JsonObject response = new JsonObject();
+        try {
+            ownerId = getUserId((UserAgent) context.getMainAgent());
+        } catch (Exception e) {
+            log.printStackTrace(e);
+            response.addProperty("status", 400);
+            response.addProperty("msg", "Could not get user agent. Are you logged in?");
+            return response;
+        }
+
+        String readerId = "";
+        try {
+            Envelope cookieEnv = context.requestEnvelope(getCookieHandle(ownerId));
+            Envelope headerEnv = context.requestEnvelope(getHeaderHandle(ownerId));
+            Envelope permissionsEnv = context.requestEnvelope(getPermissionsHandle(context.getServiceAgent()),
+                    context.getServiceAgent());
+            HashMap<String, HashSet<String>> permissionMap = (HashMap<String, HashSet<String>>)
+                    permissionsEnv.getContent();
+
+            Iterator<JsonElement> it = readerIds.iterator();
+            while (it.hasNext()) {
+                readerId = it.next().getAsString();
+                UserAgent reader = getUserAgent(context, readerId);
+
+                // Update readers of cookie and header envelopes
+                cookieEnv.addReader(reader);
+                headerEnv.addReader(reader);
+
+                // Update list of cookies, reader may access
+                HashSet<String> permissionSet = permissionMap.get(readerId);
+                if (permissionSet == null)
+                    permissionSet = new HashSet<String>();
+                permissionSet.add(ownerId);
+                permissionMap.put(readerId, permissionSet);
+            }
+            context.storeEnvelope(cookieEnv);
+            context.storeEnvelope(headerEnv);
+            permissionsEnv.setContent(permissionMap);
+            context.storeEnvelope(permissionsEnv, context.getServiceAgent());
+        } catch (Exception e) {
+            log.printStackTrace(e);
+            response.addProperty("status", 500);
+            response.addProperty("msg", "Error adding reader " + readerId);
+            return response;
+        }
+        response.addProperty("status", 200);
+        response.addProperty("msg", "Readers successfully added.");
+        return response;
+    }
+
+    /**
+     * Adds the given users as readers of the current user
+     *
+     * @param context The current execution context required to access the user's local storage
+     * @param readerIds The IDs of the users to be added
+     * @return Status code and appropriate message as JSON object
+     */
+    public JsonObject removeReader(ExecutionContext context, JsonArray readerIds) {
+        String ownerId;
+        JsonObject response = new JsonObject();
+        try {
+            ownerId = getUserId((UserAgent) context.getMainAgent());
+        } catch (Exception e) {
+            log.printStackTrace(e);
+            response.addProperty("status", 400);
+            response.addProperty("msg", "Could not get user agent. Are you logged in?");
+            return response;
+        }
+
+        String readerId = "";
+        try {
+            Envelope cookieEnv = context.requestEnvelope(getCookieHandle(ownerId));
+            Envelope headerEnv = context.requestEnvelope(getHeaderHandle(ownerId));
+            Envelope permissionsEnv = context.requestEnvelope(getPermissionsHandle(context.getServiceAgent()),
+                    context.getServiceAgent());
+            HashMap<String, HashSet<String>> permissionMap = (HashMap<String, HashSet<String>>)
+                    permissionsEnv.getContent();
+
+            Iterator<JsonElement> it = readerIds.iterator();
+            while (it.hasNext()) {
+                readerId = it.next().getAsString();
+                UserAgent reader = getUserAgent(context, readerId);
+
+                // Update readers of cookie and header envelopes
+                cookieEnv.revokeReader(reader);
+                headerEnv.revokeReader(reader);
+
+                // Update list of cookies, reader may access
+                HashSet<String> permissionSet = permissionMap.get(readerId);
+                if (permissionSet != null && permissionSet.contains(ownerId))
+                    permissionSet.remove(ownerId);
+                permissionMap.put(readerId, permissionSet);
+            }
+            context.storeEnvelope(cookieEnv);
+            context.storeEnvelope(headerEnv);
+            permissionsEnv.setContent(permissionMap);
+            context.storeEnvelope(permissionsEnv, context.getServiceAgent());
+        } catch (Exception e) {
+            log.printStackTrace(e);
+            response.addProperty("status", 500);
+            response.addProperty("msg", "Error adding reader " + readerId);
+            return response;
+        }
+        response.addProperty("status", 200);
+        response.addProperty("msg", "Readers successfully added.");
         return response;
     }
 }

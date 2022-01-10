@@ -24,8 +24,13 @@ public abstract class ParserUtil {
 
     public static JsonArray toJsonArray(String arrayString) { return new Gson().fromJson(arrayString, JsonArray.class); }
     public static JsonArray toJsonArray(ArrayList<?> arrayList) { return toJsonArray(toJsonString(arrayList)); }
+    public static JsonArray toJsonArray(HashSet<?> hashSet) { return toJsonArray(toJsonString(hashSet)); }
+
 
     public static String toJsonString(ArrayList<?> arrayList) {
+        return new Gson().toJson(arrayList);
+    }
+    public static String toJsonString(HashSet<?> arrayList) {
         return new Gson().toJson(arrayList);
     }
 

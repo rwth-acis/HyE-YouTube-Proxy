@@ -1,7 +1,6 @@
 package i5.las2peer.services.hyeYouTubeProxy.identityManagement;
 
 import com.google.gson.JsonObject;
-import io.swagger.util.Json;
 
 /**
  * Consent
@@ -103,11 +102,11 @@ public class Consent {
     }
 
     private String formatStringOutput() {
-        return "{'owner':'" + ownerId +
-                "','reader':'" + readerId +
+        return "{\"owner\":\"" + ownerId +
+                "\",\"reader\":\"" + readerId +
                 // "','identifier':'" + identifierHash +
-                "','request':'" + requestUri +
-                "','anonymous':'" + anon + "'}";
+                "\",\"request\":\"" + requestUri +
+                "\",\"anonymous\":\"" + anon + "\"}";
     }
 
     @Override
