@@ -57,7 +57,7 @@ import com.microsoft.playwright.Playwright;
 @SwaggerDefinition(
 		info = @Info(
 				title = "YouTube Data Proxy",
-				version = "0.1.13",
+				version = "0.1.14",
 				description = "Part of How's your Experience. Used to obtain data from YouTube.",
 				termsOfService = "http://your-terms-of-service-url.com",
 				contact = @Contact(
@@ -120,7 +120,11 @@ public class YouTubeProxy extends RESTService {
 			rand = new Random();
 			rand.setSeed(System.currentTimeMillis());
 		}
-		corsAddresses = new ArrayList<String>(Arrays.asList(frontendUrls.split(",")));
+		if (frontendUrls == null) {
+			corsAddresses = new ArrayList<String>();
+		} else {
+			corsAddresses = new ArrayList<String>(Arrays.asList(frontendUrls.split(",")));
+		}
 	}
 
 	private String getVideoUrl(String videoId) {
@@ -203,7 +207,8 @@ public class YouTubeProxy extends RESTService {
 
 		try {
 			browserContext.addCookies(cookies);
-			browserContext.setExtraHTTPHeaders(headers);
+			if (headers != null)
+				browserContext.setExtraHTTPHeaders(headers);
 		} catch (Exception e) {
 			log.printStackTrace(e);
 			response.addProperty("500", "Error setting request context.");
@@ -694,9 +699,9 @@ public class YouTubeProxy extends RESTService {
 		response = idm.revokeConsent(context, consentObj);
 		if (response.get("status").getAsInt() != 200)
 			return buildResponse(response.get("status").getAsInt(), response.get("msg").getAsString());
-		// If non-anonymously consent is revoked, also revoke anonymous consent
-		if (!consentObj.get("anonymous").getAsBoolean()) {
-			consentObj.addProperty("anonymous", true);
+		// If anonymous consent is revoked, also revoke non-anonymous consent
+		if (consentObj.get("anonymous").getAsBoolean()) {
+			consentObj.addProperty("anonymous", false);
 			response = idm.revokeConsent(context, consentObj);
 		}
 		return buildResponse(response.get("status").getAsInt(), response.get("msg").getAsString());

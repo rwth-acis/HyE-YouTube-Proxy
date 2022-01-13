@@ -474,6 +474,7 @@ public class IdentityManager {
     public JsonObject removeCookies(ExecutionContext context) {
         String ownerId;
         JsonObject response = new JsonObject();
+        HashMap<String, HashSet<String>> permissionMap;
         try {
             ownerId = getUserId((UserAgent) context.getMainAgent());
         } catch (Exception e) {
@@ -485,10 +486,9 @@ public class IdentityManager {
 
         try {
             Envelope cookieEnv = context.requestEnvelope(getCookieHandle(ownerId));
-            Envelope headerEnv = context.requestEnvelope(getHeaderHandle(ownerId));
             Envelope permissionsEnv = context.requestEnvelope(getPermissionsHandle(context.getServiceAgent()),
                     context.getServiceAgent());
-            HashMap<String, HashSet<String>> permissionMap = (HashMap<String, HashSet<String>>)
+            permissionMap = (HashMap<String, HashSet<String>>)
                     permissionsEnv.getContent();
 
             // Remove given user from permission sets (this might be plenty inefficient)
@@ -496,13 +496,10 @@ public class IdentityManager {
             while (mapIt.hasNext()) {
                 String readerId = mapIt.next();
 
-                // Remove users as readers from cookie and header envelopes
+                // Remove users as readers from cookie envelope
                 UserAgent reader = getUserAgent(context, readerId);
                 if (cookieEnv.hasReader(reader)) {
                     cookieEnv.revokeReader(reader);
-                }
-                if (headerEnv.hasReader(reader)) {
-                    headerEnv.revokeReader(reader);
                 }
 
                 // Remove current user from users' permission list
@@ -522,6 +519,21 @@ public class IdentityManager {
             response.addProperty("status", 500);
             response.addProperty("msg", "Error removing cookies.");
             return response;
+        }
+
+        // Also delete headers, if some were stored
+        try {
+            Envelope headerEnv = context.requestEnvelope(getHeaderHandle(ownerId));
+            Iterator<String> mapIt = permissionMap.keySet().iterator();
+            while (mapIt.hasNext()) {
+                UserAgent reader = getUserAgent(context, mapIt.next());
+                if (headerEnv.hasReader(reader)) {
+                    headerEnv.revokeReader(reader);
+                }
+            }
+            context.storeEnvelope(headerEnv);
+        } catch (Exception e) {
+            log.printStackTrace(e);
         }
         log.info("Cookies removed for user " + ownerId);
         response.addProperty("status", 200);
@@ -673,7 +685,7 @@ public class IdentityManager {
             response.addProperty("status", 200);
         } catch (i5.las2peer.api.persistency.EnvelopeNotFoundException e){
             response.addProperty("status", 200);
-            response.addProperty("msg", "");
+            response.add("msg", new JsonArray());
             return response;
         } catch (Exception e) {
             log.printStackTrace(e);
@@ -827,7 +839,6 @@ public class IdentityManager {
         String readerId = "";
         try {
             Envelope cookieEnv = context.requestEnvelope(getCookieHandle(ownerId));
-            Envelope headerEnv = context.requestEnvelope(getHeaderHandle(ownerId));
             Envelope permissionsEnv = context.requestEnvelope(getPermissionsHandle(context.getServiceAgent()),
                     context.getServiceAgent());
             HashMap<String, HashSet<String>> permissionMap = (HashMap<String, HashSet<String>>)
@@ -838,9 +849,8 @@ public class IdentityManager {
                 readerId = it.next().getAsString();
                 UserAgent reader = getUserAgent(context, readerId);
 
-                // Update readers of cookie and header envelopes
+                // Update readers of cookie envelope
                 cookieEnv.addReader(reader);
-                headerEnv.addReader(reader);
 
                 // Update list of cookies, reader may access
                 HashSet<String> permissionSet = permissionMap.get(readerId);
@@ -850,7 +860,6 @@ public class IdentityManager {
                 permissionMap.put(readerId, permissionSet);
             }
             context.storeEnvelope(cookieEnv);
-            context.storeEnvelope(headerEnv);
             permissionsEnv.setContent(permissionMap);
             context.storeEnvelope(permissionsEnv, context.getServiceAgent());
         } catch (Exception e) {
@@ -858,6 +867,18 @@ public class IdentityManager {
             response.addProperty("status", 500);
             response.addProperty("msg", "Error adding reader " + readerId);
             return response;
+        }
+
+        // Update readers of header envelope, if one exists
+        try {
+            Envelope headerEnv = context.requestEnvelope(getHeaderHandle(ownerId));
+            Iterator<JsonElement> it = readerIds.iterator();
+            while (it.hasNext()) {
+                headerEnv.addReader(getUserAgent(context, it.next().getAsString()));
+            }
+            context.storeEnvelope(headerEnv);
+        } catch (Exception e) {
+            log.printStackTrace(e);
         }
         response.addProperty("status", 200);
         response.addProperty("msg", "Readers successfully added.");
@@ -886,7 +907,6 @@ public class IdentityManager {
         String readerId = "";
         try {
             Envelope cookieEnv = context.requestEnvelope(getCookieHandle(ownerId));
-            Envelope headerEnv = context.requestEnvelope(getHeaderHandle(ownerId));
             Envelope permissionsEnv = context.requestEnvelope(getPermissionsHandle(context.getServiceAgent()),
                     context.getServiceAgent());
             HashMap<String, HashSet<String>> permissionMap = (HashMap<String, HashSet<String>>)
@@ -897,9 +917,8 @@ public class IdentityManager {
                 readerId = it.next().getAsString();
                 UserAgent reader = getUserAgent(context, readerId);
 
-                // Update readers of cookie and header envelopes
+                // Update readers of cookie envelope
                 cookieEnv.revokeReader(reader);
-                headerEnv.revokeReader(reader);
 
                 // Update list of cookies, reader may access
                 HashSet<String> permissionSet = permissionMap.get(readerId);
@@ -908,7 +927,6 @@ public class IdentityManager {
                 permissionMap.put(readerId, permissionSet);
             }
             context.storeEnvelope(cookieEnv);
-            context.storeEnvelope(headerEnv);
             permissionsEnv.setContent(permissionMap);
             context.storeEnvelope(permissionsEnv, context.getServiceAgent());
         } catch (Exception e) {
@@ -916,6 +934,18 @@ public class IdentityManager {
             response.addProperty("status", 500);
             response.addProperty("msg", "Error adding reader " + readerId);
             return response;
+        }
+
+        // Also update header envelope if one exists
+        try {
+            Envelope headerEnv = context.requestEnvelope(getHeaderHandle(ownerId));
+            Iterator<JsonElement> it = readerIds.iterator();
+            while (it.hasNext()) {
+                headerEnv.revokeReader(getUserAgent(context, it.next().getAsString()));
+            }
+            context.storeEnvelope(headerEnv);
+        } catch (Exception e) {
+            log.printStackTrace(e);
         }
         response.addProperty("status", 200);
         response.addProperty("msg", "Readers successfully added.");
