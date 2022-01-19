@@ -264,7 +264,7 @@ public class IdentityManager {
      * @param cookieArray A Json array of containing cookies data
      * @return A Json array where invalid cookies were removed
      */
-    private ArrayList<Cookie> JsonStringToCookieArray(String cookieArray) {
+    public ArrayList<Cookie> JsonStringToCookieArray(String cookieArray) {
         ArrayList<Cookie> result = new ArrayList<Cookie>();
         try {
             JsonArray cookieJsonArray = ParserUtil.toJsonArray(cookieArray);
@@ -437,7 +437,6 @@ public class IdentityManager {
         }
 
         JsonArray parsedCookies = parseCookiesFromJsonArray(cookies);
-        // TODO add test determining cookie validity (e.g., make request to YouTube and check whether user is logged in)
 
         String responseMsg = "{\"";
         try {

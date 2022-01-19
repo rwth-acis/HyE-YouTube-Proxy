@@ -22,50 +22,43 @@ public abstract class YouTubeParser {
     private final static String THUMBNAIL_TAG = "ytd-thumbnail";
     private final static String IMAGE_TAG = "img";
     private final static String LINK_TAG = "a";
+    private final static String SECONDARY_TAG = "secondary";
 
     private static final L2pLogger log = L2pLogger.getInstance(YouTubeProxy.class.getName());
 
     // Helper function used to find the given object key in the given html code and convert its value into a Json object
     private static JsonObject getMainObject(String html, String mainObjKey) {
         int htmlLength = html.length();
-        String buffer = "";
-        int pos;
 
         // Try to find given object key
-        for (pos = 0; pos < htmlLength; ++pos) {
-            if (html.charAt(pos) == mainObjKey.charAt(buffer.length())) {
-                buffer += html.charAt(pos);
-                if (buffer.equals(mainObjKey))
-                    break;
-            }
-            else if (buffer.length() > 0)
-                buffer = "";
-        }
-
-        // Did not find the object
-        if (!buffer.equals(mainObjKey))
+        int pos = html.indexOf(mainObjKey);
+        if (pos < 0 || pos >= htmlLength + mainObjKey.length())
             return null;
 
         // Go to beginning of Json String
+        pos += mainObjKey.length();
         while (html.charAt(pos) != '{')
             ++pos;
 
-        // Write the object into the buffer
+        // Write the object into buffer
+        char[] buffer = new char[htmlLength - pos];
         int bracketCount = 1;
-        buffer = "{";
+        int bufferLength = 1;
+        buffer[0] = '{';
         while (bracketCount > 0 && pos < htmlLength) {
             ++pos;
+            ++bufferLength;
+            buffer[bufferLength] = html.charAt(pos);
             if (html.charAt(pos) == '{')
                 ++bracketCount;
             else if (html.charAt(pos) == '}') //&& (html.charAt(pos-1) != '\\' || html.charAt(pos-2) == '\\'))
                 --bracketCount;
-            buffer += html.charAt(pos);
         }
 
         // Convert buffer to Json
         JsonObject mainObj;
         try {
-            mainObj = JsonParser.parseString(buffer).getAsJsonObject();
+            mainObj = JsonParser.parseString(new String(buffer)).getAsJsonObject();
         } catch (Exception e) {
             log.printStackTrace(e);
             return null;
@@ -279,5 +272,14 @@ public abstract class YouTubeParser {
             return getRecsFromResultsJS(html);
         else
             return recs;
+    }
+
+    public static boolean loggedInLibrary(String html) {
+        Document doc = Jsoup.parse(html);
+        Element body = doc.body();
+        Element secondaryDiv = body.getElementById(SECONDARY_TAG);
+        System.out.println(secondaryDiv.text());
+        System.out.println(secondaryDiv.children().size());
+        return secondaryDiv.children().size() > 0;
     }
 }

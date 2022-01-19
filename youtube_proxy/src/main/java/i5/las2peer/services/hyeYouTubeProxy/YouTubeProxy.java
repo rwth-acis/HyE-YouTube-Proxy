@@ -74,6 +74,7 @@ public class YouTubeProxy extends RESTService {
 	private final String YOUTUBE_MAIN_PAGE = "https://www.youtube.com/";
 	private final String YOUTUBE_VIDEO_PAGE = YOUTUBE_MAIN_PAGE + "watch?v=";
 	private final String YOUTUBE_RESULTS_PAGE = YOUTUBE_MAIN_PAGE + "results?search_query=";
+	private final String YOUTUBE_LIBRARY_PAGE = YOUTUBE_MAIN_PAGE + "feed/library";
 
 	private String debug;
 	private String cookieFile;
@@ -111,7 +112,7 @@ public class YouTubeProxy extends RESTService {
 		}
 		if (idm == null) {
 			// Do not allow to use static cookies/headers for production
-			if (debug.equals("true"))
+			if (debug != null && debug.equals("true"))
 				idm = new IdentityManager(cookieFile, headerFile);
 			else
 				idm = new IdentityManager(null, null);
@@ -188,6 +189,13 @@ public class YouTubeProxy extends RESTService {
 			return response;
 		}
 
+		// No cookies, no play
+		if (!hasCookies(l2pContext)) {
+			response.addProperty("403",
+					"Please upload a valid set of YouTube cookies to use this service!");
+			return response;
+		}
+
 		// Get cookies (and headers) of appropriate user
 		boolean anon = (ownerId == null || ownerId.length() == 0);
 		if (anon)
@@ -230,6 +238,19 @@ public class YouTubeProxy extends RESTService {
 	}
 
 	/**
+	 * Helper function to check whether given user currently has valid cookies stored
+	 *
+	 * @param context Current las2peer execution context
+	 * @return Whether given user currently stores valid YouTube cookies
+	 */
+	private boolean	hasCookies(ExecutionContext context) {
+		// Owner should have access regardless off specific resource (request Uri and anonymous)
+		ArrayList<Cookie> cookies = idm.getCookies(context, idm.getUserId((UserAgent) context.getMainAgent()),
+				rootUri, true);
+		return !(cookies == null || cookies.isEmpty());
+	}
+
+	/**
 	 * Initialize logger and (more importantly) smart contracts.
 	 *
 	 * @return Message whether initialization was successful
@@ -248,7 +269,7 @@ public class YouTubeProxy extends RESTService {
 		if (initialized)
 			return Response.status(400).entity("Service already initialized").build();
 
-		if (debug.equals("true"))
+		if (debug != null && debug.equals("true"))
 			log.setLevel(Level.ALL);
 		else
 			log.setLevel(Level.WARNING);
@@ -299,7 +320,7 @@ public class YouTubeProxy extends RESTService {
 			com.microsoft.playwright.Response resp = page.navigate(YOUTUBE_MAIN_PAGE);
 			// Wait until all content is loaded (doesn't seem to work that well, so let's skip it)
 			// page.waitForLoadState(LoadState.NETWORKIDLE);
-			if (debug.equals("true"))
+			if (debug != null && debug.equals("true"))
 				page.screenshot(new Page.ScreenshotOptions().setPath(Paths.get("test.png")));
 			if (resp.status() != 200) {
 				log.severe(resp.statusText());
@@ -360,7 +381,7 @@ public class YouTubeProxy extends RESTService {
 			com.microsoft.playwright.Response resp = page.navigate(getVideoUrl(videoId));
 			// Wait until all content is loaded (doesn't seem to work that well, so let's skip it)
 			// page.waitForLoadState(LoadState.NETWORKIDLE);
-			if (debug.equals("true"))
+			if (debug != null && debug.equals("true"))
 				page.screenshot(new Page.ScreenshotOptions().setPath(Paths.get("test.png")));
 			if (resp.status() != 200) {
 				log.severe(resp.statusText());
@@ -421,7 +442,7 @@ public class YouTubeProxy extends RESTService {
 			com.microsoft.playwright.Response resp = page.navigate(getResultsUrl(searchQuery));
 			// Wait until all content is loaded (doesn't seem to work that well, so let's skip it)
 			// page.waitForLoadState(LoadState.NETWORKIDLE);
-			if (debug.equals("true"))
+			if (debug != null && debug.equals("true"))
 				page.screenshot(new Page.ScreenshotOptions().setPath(Paths.get("test.png")));
 			if (resp.status() != 200) {
 				log.severe(resp.statusText());
@@ -515,6 +536,25 @@ public class YouTubeProxy extends RESTService {
 		} catch (Exception e) {
 			return buildResponse(400, "Malformed POST data.");
 		}
+
+		// check cookie validity
+		try {
+			BrowserContext browserContext = browser.newContext();
+			browserContext.addCookies(idm.JsonStringToCookieArray(cookies.toString()));
+			Page page = browserContext.newPage();
+			com.microsoft.playwright.Response resp = page.navigate(YOUTUBE_LIBRARY_PAGE);
+			if (resp.status() != 200) {
+				log.info(resp.text());
+				return buildResponse(500, "Could not validate cookies.");
+			}
+			if (!YouTubeParser.loggedInLibrary(page.content())) {
+				return buildResponse(400, "Cookie validation field.");
+			}
+		} catch (Exception e) {
+			log.printStackTrace(e);
+			return buildResponse(500, "Could not validate cookies.");
+		}
+
 		JsonObject response = idm.storeCookies(context, cookies);
 		return buildResponse(response.get("status").getAsInt(), response.get("msg").getAsString());
 	}
