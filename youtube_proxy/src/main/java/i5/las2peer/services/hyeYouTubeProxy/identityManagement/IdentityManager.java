@@ -1,6 +1,7 @@
 package i5.las2peer.services.hyeYouTubeProxy.identityManagement;
 
 import i5.las2peer.api.Context;
+import i5.las2peer.api.persistency.EnvelopeNotFoundException;
 import i5.las2peer.api.security.Agent;
 import i5.las2peer.api.security.ServiceAgent;
 import i5.las2peer.execution.ExecutionContext;
@@ -19,6 +20,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 import com.microsoft.playwright.options.Cookie;
+import i5.las2peer.services.hyeYouTubeProxy.lib.L2pUtil;
 import i5.las2peer.services.hyeYouTubeProxy.lib.ParserUtil;
 
 import java.io.File;
@@ -56,70 +58,6 @@ public class IdentityManager {
             this.cookies = parseCookiesFromFile(cookieFile);
             this.headers = parseHeadersFromFile(headerFile);
         }
-    }
-
-    /**
-     * Helper function which either fetches or creates an envelope with the given handle
-     *
-     * @param context The current execution context required to access the user's local storage
-     * @param handle The handle associated with the envelope in question
-     * @return The requested las2peer Envelope
-     */
-    private Envelope getEnvelope(Context context, String handle, Agent owner) {
-        Envelope env;
-
-        // See whether envelope already exists
-        try {
-            if (owner == null)
-                env = context.requestEnvelope(handle);
-            else
-                env = context.requestEnvelope(handle, owner);
-        } catch (Exception e) {
-            // Envelope does not exist
-            env = null;
-        }
-
-        // Else create envelope
-        if (env == null) {
-            try {
-                if (owner == null)
-                    env = context.createEnvelope(handle);
-                else
-                    env = context.createEnvelope(handle, owner);
-            } catch (Exception e) {
-                log.printStackTrace(e);
-                return null;
-            }
-        }
-
-        return env;
-    }
-
-    /**
-     * Helper function which either fetches or creates an envelope with the given handle and given content
-     *
-     * @param context The current execution context required to access the user's local storage
-     * @param handle The handle associated with the envelope in question
-     * @param content The content to be stored
-     * @param owner If not null, the envelope is signed with the given owners private key
-     * @return Whether envelope was successfully stored
-     */
-    private boolean storeEnvelope(Context context, String handle, Serializable content, Agent owner) {
-        Envelope env;
-        env = getEnvelope(context, handle, owner);
-
-        // Store content
-        try {
-            env.setContent(content);
-            if (owner == null)
-                context.storeEnvelope(env);
-            else
-                context.storeEnvelope(env, owner);
-        } catch (Exception e) {
-            log.printStackTrace(e);
-            return false;
-        }
-        return true;
     }
 
     /**
@@ -191,7 +129,7 @@ public class IdentityManager {
         return userId + COOKIE_SUFFIX;
     }
     private String getCookieHandle(UserAgent user) {
-        return getCookieHandle(getUserId(user));
+        return getCookieHandle(L2pUtil.getUserId(user));
     }
 
     /**
@@ -204,7 +142,7 @@ public class IdentityManager {
         return userId + HEADER_SUFFIX;
     }
     private String getHeaderHandle(UserAgent user) {
-        return getHeaderHandle(getUserId(user));
+        return getHeaderHandle(L2pUtil.getUserId(user));
     }
 
     /**
@@ -217,7 +155,7 @@ public class IdentityManager {
         return userId + CONSENT_SUFFIX;
     }
     private String getConsentHandle(UserAgent user) {
-        return getHeaderHandle(getUserId(user));
+        return getHeaderHandle(L2pUtil.getUserId(user));
     }
 
     /**
@@ -236,7 +174,7 @@ public class IdentityManager {
      * @param cookies A Json array of containing cookies data
      * @return A Json array where invalid cookies were removed
      */
-    private JsonArray parseCookiesFromJsonArray(JsonArray cookies) {
+    public JsonArray parseCookiesFromJsonArray(JsonArray cookies) {
         JsonArray result = new JsonArray();
         Iterator<JsonElement> it = cookies.iterator();
         while (it.hasNext()) {
@@ -310,36 +248,6 @@ public class IdentityManager {
     }
 
     /**
-     * Retrieve a user's YouTube ID
-     *
-     * @param user The User Agent whose YouTube ID we are interested in
-     * @return The YouTube ID linked to the given user
-     */
-    public String getUserId(UserAgent user) {
-        if (user == null)
-            return "";
-        return user.getIdentifier();
-    }
-
-    /**
-     * Fetches the user associated with the given handle
-     *
-     * @param context The current context from which the agent is fetched
-     * @param handle The current las2peer ID of the user in question
-     * @return The requested las2peer user agent or null if there was an issue
-     */
-    public UserAgent getUserAgent(Context context, String handle) {
-        UserAgent user;
-        try {
-            user = (UserAgent) context.fetchAgent(handle);
-        } catch (Exception e) {
-            log.printStackTrace(e);
-            return null;
-        }
-        return user;
-    }
-
-    /**
      * Initialize smart contracts
      *
      * @param context Current execution context from which the method is called
@@ -353,8 +261,8 @@ public class IdentityManager {
             consentRegistry = registryClient.loadSmartContract(ConsentRegistry.class, consentRegistryAddress);
 
             // Create empty table for permissions
-            if (!storeEnvelope(context, getPermissionsHandle(context.getServiceAgent()),
-                    new HashMap<String, HashSet<String>>(), context.getServiceAgent())) {
+            if (!L2pUtil.storeEnvelope(context, getPermissionsHandle(context.getServiceAgent()),
+                    new HashMap<String, HashSet<String>>(), context.getServiceAgent(), log)) {
                 log.warning("Initialization failed!");
                 return false;
             }
@@ -384,7 +292,7 @@ public class IdentityManager {
 
         // Else retrieve cookies from las2peer storage
         try {
-            String userId = getUserId((UserAgent) context.getMainAgent());
+            String userId = L2pUtil.getUserId((UserAgent) context.getMainAgent());
             // Check whether user is allowed to access the owner's cookies
             Envelope cookieEnvelope = context.requestEnvelope(getCookieHandle(ownerId));
 
@@ -401,7 +309,7 @@ public class IdentityManager {
 
     public JsonArray getCookiesAsJson(ExecutionContext context, String ownerId, String reqUri, boolean anon) {
         try {
-            String userId = getUserId((UserAgent) context.getMainAgent());
+            String userId = L2pUtil.getUserId((UserAgent) context.getMainAgent());
             // Check whether user is allowed to access the owner's cookies
             Envelope cookieEnvelope = context.requestEnvelope(getCookieHandle(ownerId));
 
@@ -428,7 +336,7 @@ public class IdentityManager {
         String ownerId;
         JsonObject response = new JsonObject();
         try {
-            ownerId = getUserId((UserAgent) context.getMainAgent());
+            ownerId = L2pUtil.getUserId((UserAgent) context.getMainAgent());
         } catch (Exception e) {
             log.printStackTrace(e);
             response.addProperty("status", 401);
@@ -446,7 +354,7 @@ public class IdentityManager {
             String cookieData = parsedCookies.toString();
             responseMsg += cookieData + "}";
 
-            if (!storeEnvelope(context, cookieHandle, cookieData, null))
+            if (!L2pUtil.storeEnvelope(context, cookieHandle, cookieData, null, log))
             {
                 response.addProperty("status", 500);
                 response.addProperty("msg", "Error storing cookies.");
@@ -475,7 +383,7 @@ public class IdentityManager {
         JsonObject response = new JsonObject();
         HashMap<String, HashSet<String>> permissionMap;
         try {
-            ownerId = getUserId((UserAgent) context.getMainAgent());
+            ownerId = L2pUtil.getUserId((UserAgent) context.getMainAgent());
         } catch (Exception e) {
             log.printStackTrace(e);
             response.addProperty("status", 401);
@@ -496,7 +404,7 @@ public class IdentityManager {
                 String readerId = mapIt.next();
 
                 // Remove users as readers from cookie envelope
-                UserAgent reader = getUserAgent(context, readerId);
+                UserAgent reader = L2pUtil.getUserAgent(context, readerId, log);
                 if (cookieEnv.hasReader(reader)) {
                     cookieEnv.revokeReader(reader);
                 }
@@ -525,7 +433,7 @@ public class IdentityManager {
             Envelope headerEnv = context.requestEnvelope(getHeaderHandle(ownerId));
             Iterator<String> mapIt = permissionMap.keySet().iterator();
             while (mapIt.hasNext()) {
-                UserAgent reader = getUserAgent(context, mapIt.next());
+                UserAgent reader = L2pUtil.getUserAgent(context, mapIt.next(), log);
                 if (headerEnv.hasReader(reader)) {
                     headerEnv.revokeReader(reader);
                 }
@@ -558,7 +466,7 @@ public class IdentityManager {
 
         // Else retrieve headers from local storage
         try {
-            String userId = getUserId((UserAgent) context.getMainAgent());
+            String userId = L2pUtil.getUserId((UserAgent) context.getMainAgent());
             // Check whether user is allowed to access the owner's headers
             Envelope headerEnvelope = context.requestEnvelope(getHeaderHandle(ownerId));
 
@@ -584,7 +492,7 @@ public class IdentityManager {
         String userId;
         JsonObject response = new JsonObject();
         try {
-            userId = getUserId((UserAgent) context.getMainAgent());
+            userId = L2pUtil.getUserId((UserAgent) context.getMainAgent());
         } catch (Exception e) {
             log.printStackTrace(e);
             response.addProperty("status", 401);
@@ -600,7 +508,7 @@ public class IdentityManager {
             String headerData = headers.toString();
             responseMsg += headerData + "}";
 
-            if (!storeEnvelope(context, headerHandle, headerData, null)) {
+            if (!L2pUtil.storeEnvelope(context, headerHandle, headerData, null, log)) {
                 response.addProperty("status", 500);
                 response.addProperty("msg", "Error storing headers.");
                 return response;
@@ -627,7 +535,7 @@ public class IdentityManager {
         try {
             HashMap<String, HashSet<String>> permissionMap = (HashMap<String, HashSet<String>>) context.requestEnvelope(
                     getPermissionsHandle(context.getServiceAgent()), context.getServiceAgent()).getContent();
-            return permissionMap.get(getUserId((UserAgent) context.getMainAgent()));
+            return permissionMap.get(L2pUtil.getUserId((UserAgent) context.getMainAgent()));
         } catch (Exception e) {
             log.printStackTrace(e);
             return null;
@@ -670,7 +578,7 @@ public class IdentityManager {
         String userId;
         JsonObject response = new JsonObject();
         try {
-            userId = getUserId((UserAgent) context.getMainAgent());
+            userId = L2pUtil.getUserId((UserAgent) context.getMainAgent());
         } catch (Exception e) {
             log.printStackTrace(e);
             response.addProperty("status", 401);
@@ -705,7 +613,7 @@ public class IdentityManager {
         String userId;
         JsonObject response = new JsonObject();
         try {
-            userId = getUserId((UserAgent) context.getMainAgent());
+            userId = L2pUtil.getUserId((UserAgent) context.getMainAgent());
         } catch (Exception e) {
             log.printStackTrace(e);
             response.addProperty("status", 400);
@@ -735,7 +643,7 @@ public class IdentityManager {
 
         // Store consent in las2peer
         try {
-            Envelope consentEnv = getEnvelope(context, getConsentHandle(userId), null);
+            Envelope consentEnv = L2pUtil.getEnvelope(context, getConsentHandle(userId), null, log);
             HashSet<String> consents = (HashSet<String>) consentEnv.getContent();
             if (consents == null)
                 consents = new HashSet<String>();
@@ -766,7 +674,7 @@ public class IdentityManager {
         String userId;
         JsonObject response = new JsonObject();
         try {
-            userId = getUserId((UserAgent) context.getMainAgent());
+            userId = L2pUtil.getUserId((UserAgent) context.getMainAgent());
         } catch (Exception e) {
             log.printStackTrace(e);
             response.addProperty("status", 400);
@@ -827,7 +735,7 @@ public class IdentityManager {
         String ownerId;
         JsonObject response = new JsonObject();
         try {
-            ownerId = getUserId((UserAgent) context.getMainAgent());
+            ownerId = L2pUtil.getUserId((UserAgent) context.getMainAgent());
         } catch (Exception e) {
             log.printStackTrace(e);
             response.addProperty("status", 400);
@@ -846,7 +754,7 @@ public class IdentityManager {
             Iterator<JsonElement> it = readerIds.iterator();
             while (it.hasNext()) {
                 readerId = it.next().getAsString();
-                UserAgent reader = getUserAgent(context, readerId);
+                UserAgent reader = L2pUtil.getUserAgent(context, readerId, log);
 
                 // Update readers of cookie envelope
                 cookieEnv.addReader(reader);
@@ -873,7 +781,7 @@ public class IdentityManager {
             Envelope headerEnv = context.requestEnvelope(getHeaderHandle(ownerId));
             Iterator<JsonElement> it = readerIds.iterator();
             while (it.hasNext()) {
-                headerEnv.addReader(getUserAgent(context, it.next().getAsString()));
+                headerEnv.addReader(L2pUtil.getUserAgent(context, it.next().getAsString(), log));
             }
             context.storeEnvelope(headerEnv);
         } catch (Exception e) {
@@ -895,7 +803,7 @@ public class IdentityManager {
         String ownerId;
         JsonObject response = new JsonObject();
         try {
-            ownerId = getUserId((UserAgent) context.getMainAgent());
+            ownerId = L2pUtil.getUserId((UserAgent) context.getMainAgent());
         } catch (Exception e) {
             log.printStackTrace(e);
             response.addProperty("status", 400);
@@ -914,7 +822,7 @@ public class IdentityManager {
             Iterator<JsonElement> it = readerIds.iterator();
             while (it.hasNext()) {
                 readerId = it.next().getAsString();
-                UserAgent reader = getUserAgent(context, readerId);
+                UserAgent reader = L2pUtil.getUserAgent(context, readerId, log);
 
                 // Update readers of cookie envelope
                 cookieEnv.revokeReader(reader);
@@ -940,7 +848,7 @@ public class IdentityManager {
             Envelope headerEnv = context.requestEnvelope(getHeaderHandle(ownerId));
             Iterator<JsonElement> it = readerIds.iterator();
             while (it.hasNext()) {
-                headerEnv.revokeReader(getUserAgent(context, it.next().getAsString()));
+                headerEnv.revokeReader(L2pUtil.getUserAgent(context, it.next().getAsString(), log));
             }
             context.storeEnvelope(headerEnv);
         } catch (Exception e) {

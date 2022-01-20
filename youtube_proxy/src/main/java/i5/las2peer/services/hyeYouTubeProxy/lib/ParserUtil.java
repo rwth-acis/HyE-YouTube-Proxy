@@ -18,6 +18,10 @@ public abstract class ParserUtil {
                 Character.isLetterOrDigit(c));
     }
 
+    public static JsonElement toJsonElement(String element) {
+        return new Gson().fromJson(element, JsonElement.class);
+    }
+
     public static JsonObject toJsonObject(String jsonString) {
         return new Gson().fromJson(jsonString, JsonObject.class);
     }
@@ -25,7 +29,6 @@ public abstract class ParserUtil {
     public static JsonArray toJsonArray(String arrayString) { return new Gson().fromJson(arrayString, JsonArray.class); }
     public static JsonArray toJsonArray(ArrayList<?> arrayList) { return toJsonArray(toJsonString(arrayList)); }
     public static JsonArray toJsonArray(HashSet<?> hashSet) { return toJsonArray(toJsonString(hashSet)); }
-
 
     public static String toJsonString(ArrayList<?> arrayList) {
         return new Gson().toJson(arrayList);

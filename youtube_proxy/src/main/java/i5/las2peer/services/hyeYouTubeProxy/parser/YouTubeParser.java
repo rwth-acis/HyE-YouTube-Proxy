@@ -42,23 +42,25 @@ public abstract class YouTubeParser {
 
         // Write the object into buffer
         char[] buffer = new char[htmlLength - pos];
+        buffer[0] = '{';
         int bracketCount = 1;
         int bufferLength = 1;
-        buffer[0] = '{';
+        ++pos;
         while (bracketCount > 0 && pos < htmlLength) {
+            char c = html.charAt(pos);
+            buffer[bufferLength] = c;
             ++pos;
             ++bufferLength;
-            buffer[bufferLength] = html.charAt(pos);
-            if (html.charAt(pos) == '{')
+            if (c == '{')
                 ++bracketCount;
-            else if (html.charAt(pos) == '}') //&& (html.charAt(pos-1) != '\\' || html.charAt(pos-2) == '\\'))
+            else if (c == '}') //&& (html.charAt(pos-1) != '\\' || html.charAt(pos-2) == '\\'))
                 --bracketCount;
         }
 
         // Convert buffer to Json
         JsonObject mainObj;
         try {
-            mainObj = JsonParser.parseString(new String(buffer)).getAsJsonObject();
+            mainObj = JsonParser.parseString(new String(buffer).substring(0, bufferLength)).getAsJsonObject();
         } catch (Exception e) {
             log.printStackTrace(e);
             return null;
@@ -272,14 +274,5 @@ public abstract class YouTubeParser {
             return getRecsFromResultsJS(html);
         else
             return recs;
-    }
-
-    public static boolean loggedInLibrary(String html) {
-        Document doc = Jsoup.parse(html);
-        Element body = doc.body();
-        Element secondaryDiv = body.getElementById(SECONDARY_TAG);
-        System.out.println(secondaryDiv.text());
-        System.out.println(secondaryDiv.children().size());
-        return secondaryDiv.children().size() > 0;
     }
 }

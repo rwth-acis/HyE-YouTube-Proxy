@@ -3,6 +3,10 @@ package i5.las2peer.services.hyeYouTubeProxy;
 import java.io.Serializable;
 import java.net.HttpURLConnection;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.file.Paths;
 
 import java.util.*;
@@ -13,10 +17,13 @@ import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 
 import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
 import com.microsoft.playwright.options.Cookie;
 import i5.las2peer.api.Context;
+import i5.las2peer.api.persistency.Envelope;
+import i5.las2peer.api.persistency.EnvelopeNotFoundException;
 import i5.las2peer.api.security.UserAgent;
 import i5.las2peer.execution.ExecutionContext;
 import i5.las2peer.logging.L2pLogger;
@@ -26,6 +33,7 @@ import i5.las2peer.restMapper.annotations.ServicePath;
 
 import i5.las2peer.services.hyeYouTubeProxy.identityManagement.Consent;
 import i5.las2peer.services.hyeYouTubeProxy.identityManagement.IdentityManager;
+import i5.las2peer.services.hyeYouTubeProxy.lib.L2pUtil;
 import i5.las2peer.services.hyeYouTubeProxy.parser.YouTubeParser;
 import i5.las2peer.services.hyeYouTubeProxy.parser.Recommendation;
 import i5.las2peer.services.hyeYouTubeProxy.lib.ParserUtil;
@@ -43,6 +51,7 @@ import com.microsoft.playwright.Browser;
 import com.microsoft.playwright.BrowserContext;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Playwright;
+import io.swagger.util.Json;
 // import com.microsoft.playwright.options.LoadState;
 
 /**
@@ -57,7 +66,7 @@ import com.microsoft.playwright.Playwright;
 @SwaggerDefinition(
 		info = @Info(
 				title = "YouTube Data Proxy",
-				version = "0.1.14",
+				version = "0.1.15",
 				description = "Part of How's your Experience. Used to obtain data from YouTube.",
 				termsOfService = "http://your-terms-of-service-url.com",
 				contact = @Contact(
@@ -74,7 +83,8 @@ public class YouTubeProxy extends RESTService {
 	private final String YOUTUBE_MAIN_PAGE = "https://www.youtube.com/";
 	private final String YOUTUBE_VIDEO_PAGE = YOUTUBE_MAIN_PAGE + "watch?v=";
 	private final String YOUTUBE_RESULTS_PAGE = YOUTUBE_MAIN_PAGE + "results?search_query=";
-	private final String YOUTUBE_LIBRARY_PAGE = YOUTUBE_MAIN_PAGE + "feed/library";
+	private final String YOUTUBE_PROFILE_PAGE = "https://studio.youtube.com/";
+	private final String PREFERENCE_PREFIX = "PREFERENCES_";
 
 	private String debug;
 	private String cookieFile;
@@ -136,6 +146,8 @@ public class YouTubeProxy extends RESTService {
 		return YOUTUBE_RESULTS_PAGE + searchQuery;
 	}
 
+	private String getPreferenceHandle(String userId) { return PREFERENCE_PREFIX + userId; }
+
 	/**
 	 * Helper function to find appropriate cookies to use based on existing permissions granted to requesting user.
 	 *
@@ -144,6 +156,12 @@ public class YouTubeProxy extends RESTService {
 	 * @return Handle of chosen user
 	 */
 	private String findMatch(ExecutionContext context, String request) {
+		// If user has preference, use this
+		JsonObject resp = getUserPreference(context);
+		if (resp.get("status").getAsInt() == 200 && resp.get("msg").getAsString() != "") {
+			return resp.get("msg").getAsString();
+		}
+
 		// Get users whose cookies we have access to
 		HashSet<String> candidates = idm.getPermissions(context);
 
@@ -169,7 +187,7 @@ public class YouTubeProxy extends RESTService {
 		}
 
 		// Return current user if even this didn't yield a result
-		return userId.length() > 0 ? userId : idm.getUserId((UserAgent) context.getMainAgent());
+		return userId.length() > 0 ? userId : L2pUtil.getUserId((UserAgent) context.getMainAgent());
 	}
 
 	/**
@@ -185,12 +203,14 @@ public class YouTubeProxy extends RESTService {
 								  String request) {
 		JsonObject response = new JsonObject();
 		if (!initialized) {
+			browserContext.close();
 			response.addProperty("500", "Service not initialized!");
 			return response;
 		}
 
 		// No cookies, no play
 		if (!hasCookies(l2pContext)) {
+			browserContext.close();
 			response.addProperty("403",
 					"Please upload a valid set of YouTube cookies to use this service!");
 			return response;
@@ -205,10 +225,12 @@ public class YouTubeProxy extends RESTService {
 		HashMap<String, String> headers = idm.getHeaders(l2pContext, ownerId, request, anon);
 
 		if (cookies == null) {
+			browserContext.close();
 			response.addProperty("500", "Could not retrieve cookies.");
 			return response;
 		}
 		if (cookies.isEmpty()) {
+			browserContext.close();
 			response.addProperty("401", "Lacking consent for request.");
 			return response;
 		}
@@ -220,6 +242,7 @@ public class YouTubeProxy extends RESTService {
 		} catch (Exception e) {
 			log.printStackTrace(e);
 			response.addProperty("500", "Error setting request context.");
+			browserContext.close();
 			return response;
 		}
 		response.addProperty("200", "OK");
@@ -245,9 +268,85 @@ public class YouTubeProxy extends RESTService {
 	 */
 	private boolean	hasCookies(ExecutionContext context) {
 		// Owner should have access regardless off specific resource (request Uri and anonymous)
-		ArrayList<Cookie> cookies = idm.getCookies(context, idm.getUserId((UserAgent) context.getMainAgent()),
+		ArrayList<Cookie> cookies = idm.getCookies(context, L2pUtil.getUserId((UserAgent) context.getMainAgent()),
 				rootUri, true);
 		return !(cookies == null || cookies.isEmpty());
+	}
+
+	/**
+	 * Gets the preferred User Agent ID of cookies to use for requests to the given value
+	 *
+	 * @param context Current las2peer execution context
+	 * @return User ID of preferred user, or empty string if no preference is stored
+	 */
+	private JsonObject getUserPreference(ExecutionContext context) {
+		JsonObject response = new JsonObject();
+		UserAgent user = null;
+		try {
+			user = (UserAgent) context.getMainAgent();
+		} catch (Exception e) {
+			log.printStackTrace(e);
+			response.addProperty("status", 401);
+			response.addProperty("msg", "Could not get user agent! Are you logged in?");
+			return response;
+		}
+
+		// Get envelope
+		Envelope env = L2pUtil.getEnvelope(context, getPreferenceHandle(L2pUtil.getUserId(user)), null, log);
+		if (env == null) {
+			response.addProperty("status", 500);
+			response.addProperty("msg", "Could not get preferences.");
+			return response;
+		}
+
+		if (env.getContent() == null)
+		{
+			response.addProperty("status", 200);
+			response.addProperty("msg", "");
+			return response;
+		}
+
+		response.addProperty("status", 200);
+		response.addProperty("msg", env.getContent().toString());
+		return response;
+	}
+
+	/**
+	 * Sets the preferred User Agent ID of cookies to use for requests to the given value, if they have permission
+	 *
+	 * @param context Current las2peer execution context
+	 * @param ownerId User ID of preferred cookie owner
+	 * @return Response indicating whether preference was updated successfully
+	 */
+	private JsonObject setUserPreference(ExecutionContext context, String ownerId) {
+		JsonObject response = new JsonObject();
+		UserAgent user = null;
+		try {
+			user = (UserAgent) context.getMainAgent();
+		} catch (Exception e) {
+			log.printStackTrace(e);
+			response.addProperty("status", 401);
+			response.addProperty("msg", "Could not get user agent! Are you logged in?");
+			return response;
+		}
+
+		// Check consent first
+		JsonArray permissions = ParserUtil.toJsonArray(getReader().getEntity().toString());
+		if (permissions == null || !permissions.contains(ParserUtil.toJsonElement(ownerId))) {
+			// No permission
+			response.addProperty("status", 403);
+			response.addProperty("msg","Lacking permissions to access requested cookies.");
+			return response;
+		}
+		if (!L2pUtil.storeEnvelope(context, getPreferenceHandle(L2pUtil.getUserId(user)), ownerId, null, log)) {
+			response.addProperty("status", 500);
+			response.addProperty("msg", "Could not store preferences.");
+			return response;
+		}
+
+		response.addProperty("status", 200);
+		response.addProperty("msg", "Preference updated.");
+		return response;
 	}
 
 	/**
@@ -314,6 +413,8 @@ public class YouTubeProxy extends RESTService {
 		response = setContext(l2pContext, context, ownerId, rootUri);
 		if (!response.has("200"))
 			return buildResponse(Integer.parseInt((String) response.keySet().toArray()[0]), response.toString());
+		else
+			response = new JsonObject();
 
 		try {
 			Page page = context.newPage();
@@ -325,12 +426,15 @@ public class YouTubeProxy extends RESTService {
 			if (resp.status() != 200) {
 				log.severe(resp.statusText());
 				response.addProperty("500", "Could not get YouTube main page.");
+				context.close();
 				return buildResponse(500, response.toString());
 			}
 			ArrayList<Recommendation> recommendations = YouTubeParser.mainPage(page.content());
+			context.close();
 			return buildResponse(200, ParserUtil.toJsonString(recommendations));
 		} catch (Exception e) {
 			log.printStackTrace(e);
+			context.close();
 			response.addProperty("500", "Unspecified server error.");
 			return buildResponse(500, response.toString());
 		}
@@ -375,6 +479,8 @@ public class YouTubeProxy extends RESTService {
 		response = setContext(l2pContext, context, ownerId, videoUri);
 		if (!response.has("200"))
 			return buildResponse(Integer.parseInt((String) response.keySet().toArray()[0]), response.toString());
+		else
+			response = new JsonObject();
 
 		try {
 			Page page = context.newPage();
@@ -386,12 +492,15 @@ public class YouTubeProxy extends RESTService {
 			if (resp.status() != 200) {
 				log.severe(resp.statusText());
 				response.addProperty("500", "Could not get recommendations for video " + videoId);
+				context.close();
 				return buildResponse(500, response.toString());
 			}
 			ArrayList<Recommendation> recommendations = YouTubeParser.aside(page.content());
+			context.close();
 			return Response.ok().entity(ParserUtil.toJsonString(recommendations)).build();
 		} catch (Exception e) {
 			log.printStackTrace(e);
+			context.close();
 			response.addProperty("500", "Unspecified server error.");
 			return buildResponse(500, response.toString());
 		}
@@ -436,6 +545,8 @@ public class YouTubeProxy extends RESTService {
 		response = setContext(l2pContext, context, ownerId, searchUri);
 		if (!response.has("200"))
 			return buildResponse(Integer.parseInt((String) response.keySet().toArray()[0]), response.toString());
+		else
+			response = new JsonObject();
 
 		try {
 			Page page = context.newPage();
@@ -447,12 +558,15 @@ public class YouTubeProxy extends RESTService {
 			if (resp.status() != 200) {
 				log.severe(resp.statusText());
 				response.addProperty("500", "Could not get YouTube results for query " + searchQuery);
+				context.close();
 				return buildResponse(500, response.toString());
 			}
 			ArrayList<Recommendation> recommendations = YouTubeParser.resultsPage(page.content());
+			context.close();
 			return buildResponse(200, ParserUtil.toJsonString(recommendations));
 		} catch (Exception e) {
 			log.printStackTrace(e);
+			context.close();
 			response.addProperty("500", "Unspecified server error");
 			return buildResponse(500, response.toString());
 		}
@@ -491,7 +605,7 @@ public class YouTubeProxy extends RESTService {
 			return buildResponse(401, response.toString());
 		}
 		try {
-			cookies = idm.getCookiesAsJson(context, idm.getUserId(user), rootUri, true);
+			cookies = idm.getCookiesAsJson(context, L2pUtil.getUserId(user), rootUri, true);
 			if (cookies == null) {
 				return buildResponse(200, new JsonArray().toString());
 			}
@@ -537,18 +651,26 @@ public class YouTubeProxy extends RESTService {
 			return buildResponse(400, "Malformed POST data.");
 		}
 
-		// check cookie validity
+		// Check cookie validity
 		try {
-			BrowserContext browserContext = browser.newContext();
-			browserContext.addCookies(idm.JsonStringToCookieArray(cookies.toString()));
-			Page page = browserContext.newPage();
-			com.microsoft.playwright.Response resp = page.navigate(YOUTUBE_LIBRARY_PAGE);
-			if (resp.status() != 200) {
-				log.info(resp.text());
-				return buildResponse(500, "Could not validate cookies.");
+			HttpClient client = HttpClient.newHttpClient();
+			HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
+					.uri(URI.create(YOUTUBE_PROFILE_PAGE));
+			// Add cookies to request
+			String cookieString = "";
+			for (JsonElement cookieElem : cookies)
+			{
+				JsonObject cookie = cookieElem.getAsJsonObject();
+				cookieString += cookie.get("name").getAsString() + '=' + cookie.get("value").getAsString() + "; ";
 			}
-			if (!YouTubeParser.loggedInLibrary(page.content())) {
-				return buildResponse(400, "Cookie validation field.");
+			requestBuilder.setHeader("Cookie", cookieString);
+			HttpResponse<String> response = client.send(requestBuilder.build(), HttpResponse.BodyHandlers.ofString());
+			if (response.statusCode() >= 300) {
+				// 30x means the user is presented with login screen, thus not logged in currently
+				return buildResponse(400, "Cookie validation failed.");
+			} else if (response.statusCode() >= 400) {
+				// 4xx/5xx is bad, but not necessarily the cookies fault
+				return buildResponse(500, "Could not validate cookies.");
 			}
 		} catch (Exception e) {
 			log.printStackTrace(e);
@@ -775,7 +897,7 @@ public class YouTubeProxy extends RESTService {
 
 		try {
 			context = (ExecutionContext) Context.getCurrent();
-			readerId = idm.getUserId((UserAgent) context.getMainAgent());
+			readerId = L2pUtil.getUserId((UserAgent) context.getMainAgent());
 		} catch (Exception e) {
 			response.addProperty("401", "Could not get user agent. Are you logged in?");
 			return buildResponse(401, response.toString());
@@ -876,6 +998,66 @@ public class YouTubeProxy extends RESTService {
 			return buildResponse(400, "Malformed POST data.");
 		}
 		response = idm.removeReader(context, readerIds);
+		return buildResponse(response.get("status").getAsInt(), response.get("msg").getAsString());
+	}
+
+	/**
+	 * Function to get foreign cookie preference of current user
+	 *
+	 * @return Returns an HTTP response with prefered user ID as plain text
+	 */
+	@GET
+	@Path("/preference")
+	@Produces(MediaType.TEXT_PLAIN)
+	@ApiResponses(
+			value = { @ApiResponse(
+					code = HttpURLConnection.HTTP_OK,
+					message = "OK") })
+	@ApiOperation(
+			value = "YouTube/Reader",
+			notes = "reader_id")
+	public Response getCookiePreference() {
+		ExecutionContext context = null;
+		if (!initialized)
+			return buildResponse(500, "Service not initialized!");
+
+		try {
+			context = (ExecutionContext) Context.getCurrent();
+		} catch (Exception e) {
+			return buildResponse(400, "Could not get execution context.");
+		}
+		JsonObject response = getUserPreference(context);
+		return buildResponse(response.get("status").getAsInt(), response.get("msg").getAsString());
+	}
+
+	/**
+	 * Function to set foreign cookie preference
+	 *
+	 * @param ownerId The user IDs whose recommendations, the requesting user would like to use
+	 * @return Returns an HTTP response with plain text string content indicating whether updating was successful or not
+	 */
+	@POST
+	@Path("/preference")
+	@Consumes(MediaType.TEXT_PLAIN)
+	@Produces(MediaType.TEXT_PLAIN)
+	@ApiResponses(
+			value = { @ApiResponse(
+					code = HttpURLConnection.HTTP_OK,
+					message = "OK") })
+	@ApiOperation(
+			value = "YouTube/Reader",
+			notes = "reader_id")
+	public Response addCookiePreference(String ownerId) {
+		ExecutionContext context = null;
+		if (!initialized)
+			return buildResponse(500, "Service not initialized!");
+
+		try {
+			context = (ExecutionContext) Context.getCurrent();
+		} catch (Exception e) {
+			return buildResponse(400, "Could not get execution context.");
+		}
+		JsonObject response = setUserPreference(context, ownerId);
 		return buildResponse(response.get("status").getAsInt(), response.get("msg").getAsString());
 	}
 }
