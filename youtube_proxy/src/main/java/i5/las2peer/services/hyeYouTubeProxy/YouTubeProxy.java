@@ -98,8 +98,6 @@ public class YouTubeProxy extends RESTService {
 	private static boolean initialized = false;
 	private static IdentityManager idm = null;
 	private static Random rand = null;
-	private String videoUri;
-	private String searchUri;
 	private ArrayList<String> corsAddresses;
 
 	/**
@@ -110,11 +108,6 @@ public class YouTubeProxy extends RESTService {
 		log.info("Got properties: debug = " + debug + ", cookieFile = " + cookieFile + ", headerFile = " +
 				headerFile + ", consentRegistryAddress = " + consentRegistryAddress + ", rootUri = " + rootUri +
 				", frontendUrls = " + frontendUrls);
-		// Add trailing slash, if not already there
-		if (rootUri.charAt(rootUri.length()-1) != '/')
-			rootUri += '/';
-		videoUri = rootUri + "watch";
-		searchUri = rootUri + "results";
 
 		if (browser == null) {
 			Playwright playwright = Playwright.create();
@@ -176,18 +169,28 @@ public class YouTubeProxy extends RESTService {
 
 		// If recommendation service isn't running, try to get random user
 		// TODO repeat if chosen user did not consent to this particular request
+		String readerId = L2pUtil.getUserId((UserAgent) context.getMainAgent());
 		String userId = "";
-		if (candidates != null && candidates.size() > 0) {
+		while (candidates != null && candidates.size() > 0) {
+			// Get random candidate
 			Iterator<String> it = candidates.iterator();
 			int randPos = rand.nextInt(candidates.size());
 			while (it.hasNext() && randPos >= 0) {
 				userId = it.next();
 				--randPos;
 			}
+			// Check for permission
+			if (idm.checkConsent(new Consent(userId, readerId, rootUri, true))) {
+				break;
+			} else {
+				// Go again
+				candidates.remove(userId);
+				userId = "";
+			}
 		}
 
 		// Return current user if even this didn't yield a result
-		return userId.length() > 0 ? userId : L2pUtil.getUserId((UserAgent) context.getMainAgent());
+		return userId.length() > 0 ? userId : readerId;
 	}
 
 	/**
@@ -321,6 +324,9 @@ public class YouTubeProxy extends RESTService {
 	private JsonObject setUserPreference(ExecutionContext context, String ownerId) {
 		JsonObject response = new JsonObject();
 		UserAgent user = null;
+		if (ownerId == null) {
+			ownerId = "";
+		}
 		try {
 			user = (UserAgent) context.getMainAgent();
 		} catch (Exception e) {
@@ -330,9 +336,10 @@ public class YouTubeProxy extends RESTService {
 			return response;
 		}
 
-		// Check consent first
+		// Unless owner is empty check consent first
 		JsonArray permissions = ParserUtil.toJsonArray(getReader().getEntity().toString());
-		if (permissions == null || !permissions.contains(ParserUtil.toJsonElement(ownerId))) {
+		if (ownerId.length() > 0 && (permissions == null ||
+		  !permissions.contains(ParserUtil.toJsonElement(ownerId)))) {
 			// No permission
 			response.addProperty("status", 403);
 			response.addProperty("msg","Lacking permissions to access requested cookies.");
@@ -410,6 +417,7 @@ public class YouTubeProxy extends RESTService {
 		}
 
 		BrowserContext context = browser.newContext();
+		// TODO don't check for rootUri, but get requestUri from request data
 		response = setContext(l2pContext, context, ownerId, rootUri);
 		if (!response.has("200"))
 			return buildResponse(Integer.parseInt((String) response.keySet().toArray()[0]), response.toString());
@@ -476,7 +484,8 @@ public class YouTubeProxy extends RESTService {
 		}
 
 		BrowserContext context = browser.newContext();
-		response = setContext(l2pContext, context, ownerId, videoUri);
+		// TODO don't check for rootUri, but get requestUri from request data
+		response = setContext(l2pContext, context, ownerId, rootUri);
 		if (!response.has("200"))
 			return buildResponse(Integer.parseInt((String) response.keySet().toArray()[0]), response.toString());
 		else
@@ -542,7 +551,8 @@ public class YouTubeProxy extends RESTService {
 		}
 
 		BrowserContext context = browser.newContext();
-		response = setContext(l2pContext, context, ownerId, searchUri);
+		// TODO don't check for rootUri, but get requestUri from request data
+		response = setContext(l2pContext, context, ownerId, rootUri);
 		if (!response.has("200"))
 			return buildResponse(Integer.parseInt((String) response.keySet().toArray()[0]), response.toString());
 		else
@@ -911,8 +921,7 @@ public class YouTubeProxy extends RESTService {
 			while (it.hasNext()) {
 				String ownerId = it.next();
 				Consent consentObj = new Consent(ownerId, readerId, rootUri, false);
-				if (idm.checkConsent(consentObj) || idm.checkConsent(consentObj.setRequestUri(videoUri)) ||
-						idm.checkConsent(consentObj.setRequestUri(searchUri))) {
+				if (idm.checkConsent(consentObj)) {
 					ownerIds.add(ownerId);
 				}
 			}
@@ -1058,6 +1067,35 @@ public class YouTubeProxy extends RESTService {
 			return buildResponse(400, "Could not get execution context.");
 		}
 		JsonObject response = setUserPreference(context, ownerId);
+		return buildResponse(response.get("status").getAsInt(), response.get("msg").getAsString());
+	}
+
+	/**
+	 * Function to set foreign cookie preference to empty string
+	 *
+	 * @return Returns an HTTP response with plain text string content indicating whether updating was successful or not
+	 */
+	@DELETE
+	@Path("/preference")
+	@Produces(MediaType.TEXT_PLAIN)
+	@ApiResponses(
+			value = { @ApiResponse(
+					code = HttpURLConnection.HTTP_OK,
+					message = "OK") })
+	@ApiOperation(
+			value = "YouTube/Reader",
+			notes = "reader_id")
+	public Response removeCookiePreference() {
+		ExecutionContext context = null;
+		if (!initialized)
+			return buildResponse(500, "Service not initialized!");
+
+		try {
+			context = (ExecutionContext) Context.getCurrent();
+		} catch (Exception e) {
+			return buildResponse(400, "Could not get execution context.");
+		}
+		JsonObject response = setUserPreference(context, "");
 		return buildResponse(response.get("status").getAsInt(), response.get("msg").getAsString());
 	}
 }

@@ -555,7 +555,7 @@ public class IdentityManager {
             boolean result = consentRegistry.hashExists(consentHash).sendAsync().get();
 
             // Consent for non-anonymous requests also entails consent for anonymous ones
-            if (!result && !consentObj.getAnon()) {
+            if (!result && consentObj.getAnon()) {
                 consentHash = Util.soliditySha3(consentObj.setAnon(false).toString());
                 log.info("Checking for consent " + ParserUtil.bytesToHex(consentHash));
                 return consentRegistry.hashExists(consentHash).sendAsync().get();
@@ -690,16 +690,19 @@ public class IdentityManager {
             return response;
         }
 
-        // Revoke consent from blockchain
-        try {
-            byte[] consentHash = Util.soliditySha3(consentObj.toString());
-            log.info("Revoking consent " + ParserUtil.bytesToHex(consentHash));
-            consentRegistry.revokeConsent(consentHash).sendAsync().get();
-        } catch (Exception e) {
-            log.printStackTrace(e);
-            response.addProperty("status", 500);
-            response.addProperty("msg", "Error in blockchain communication.");
-            return response;
+        // Trying to revoke non-existent consent seems to cause issues
+        if (checkConsent(consentObj)) {
+            // Revoke consent from blockchain
+            try {
+                byte[] consentHash = Util.soliditySha3(consentObj.toString());
+                log.info("Revoking consent " + ParserUtil.bytesToHex(consentHash));
+                consentRegistry.revokeConsent(consentHash).sendAsync().get();
+            } catch (Exception e) {
+                log.printStackTrace(e);
+                response.addProperty("status", 500);
+                response.addProperty("msg", "Error in blockchain communication.");
+                return response;
+            }
         }
 
         // Revoke consent from las2peer
