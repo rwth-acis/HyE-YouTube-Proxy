@@ -14,14 +14,23 @@ EXTRA_ETH_WAIT=${EXTRA_ETH_WAIT:-30}
 # difficulty)
 # ... really, at this point we might as well wait forever (until the user
 # kills us), but let's go for a solid six hours
-function host { echo ${1%%:*}; }
-function port { echo ${1#*:}; }
+CONFIG_ENDPOINT_WAIT=${CONFIG_ENDPOINT_WAIT:-21600}
+
+NODE_ID_SEED=${NODE_ID_SEED:-$RANDOM}
+
+ETH_PROPS_DIR=/app/las2peer/etc/
+ETH_PROPS=i5.las2peer.registry.data.RegistryConfiguration.properties
+CONTACT_PROPS=i5.las2peer.services.contactService.ContactService.properties
+HYE_PROPS=i5.las2peer.services.hyeYouTubeProxy.YouTubeProxy.properties
+export JAVA_HOME=/opt/jdk17 && export PATH=$PATH:$JAVA_HOME/bin
 
 function waitForEndpoint {
     /app/wait-for-command/wait-for-command.sh -c "nc -z ${1} ${2:-80}" --time ${3:-10} --quiet
 }
 
-function truffleMigrate { 
+function host { echo ${1%%:*}; }
+function port { echo ${1#*:}; }
+function truffleMigrate {
     echo Starting truffle migration ...
     echo "just to be sure the Eth client is ready, wait an extra $EXTRA_ETH_WAIT secs ..."
     echo "    (Yes, this is a potential source of problems, maybe increase.)"
@@ -29,6 +38,11 @@ function truffleMigrate {
     echo "wait over, proceeding."
     cd /app/las2peer-registry-contracts
     ./node_modules/.bin/truffle migrate --network docker_boot 2>&1 | tee migration.log
+    echo done. Setting contract addresses in config file ...
+    # yeah, this isn't fun:
+    # addresses should already be in properties file
+    # cat migration.log | grep -A5 "\(Deploying\|Replacing\|contract address\) \'\(CommunityTagIndex\|UserRegistry\|ServiceRegistry\|GroupRegistry\|ReputationRegistry\)\'" | grep '\(Deploying\|Replacing\|contract address\)' | tr -d " '>:" | sed -e '$!N;s/\n//;s/Deploying//;s/Replacing//;s/contractaddress/Address = /;s/./\l&/' >> "${ETH_PROPS_DIR}${ETH_PROPS}"
+    cp migration.log /app/las2peer/node-storage/migration.log
     echo done.
  }
 
@@ -37,7 +51,7 @@ if [ -n "$LAS2PEER_CONFIG_ENDPOINT" ]; then
     if waitForEndpoint $(host ${LAS2PEER_CONFIG_ENDPOINT}) $(port ${LAS2PEER_CONFIG_ENDPOINT}) $CONFIG_ENDPOINT_WAIT; then
         echo "Port is available (but that may just be the Docker daemon)."
         echo Downloading ...
-        wget --quiet --tries=inf "http://${LAS2PEER_CONFIG_ENDPOINT}/${ETH_PROPS}" -O "${ETH_PROPS}"
+        wget --quiet --tries=inf "http://${LAS2PEER_CONFIG_ENDPOINT}/${ETH_PROPS}" -O "${ETH_PROPS_DIR}${ETH_PROPS}"
         echo done.
     else
         echo Registry configuration endpoint specified but not accessible. Aborting.
@@ -48,16 +62,140 @@ fi
 if [ -n "$LAS2PEER_ETH_HOST" ]; then
     echo Replacing Ethereum client host in config files ...
     ETH_HOST_SUB=$(host $LAS2PEER_ETH_HOST)
+    sed -i "s|^endpoint.*$|endpoint = http://${LAS2PEER_ETH_HOST}|" "${ETH_PROPS_DIR}${ETH_PROPS}"
     sed -i "s/eth-bootstrap/${ETH_HOST_SUB}/" /app/las2peer-registry-contracts/truffle.js
     echo done.
 fi
-if [ -n "$LAS2PEER_ETH_HOST" ]; then
-    echo Waiting for Ethereum client at $(host $LAS2PEER_ETH_HOST):$(port $LAS2PEER_ETH_HOST)...
-    if waitForEndpoint $(host $LAS2PEER_ETH_HOST) $(port $LAS2PEER_ETH_HOST) 300; then
-        echo Found Eth client. 
-        truffleMigrate
-    else
-        echo Ethereum client not accessible. Aborting.
-        exit 2
+
+if [ -n "$CONTACT_STORER_NAME" ]; then
+    sed -i "s|contactstorer|${CONTACT_STORER_NAME}|" "${ETH_PROPS_DIR}${CONTACT_PROPS}"
+fi
+
+if [ -n "$CONTACT_STORER_PW" ]; then
+    sed -i "s|supersecretpassword|${CONTACT_STORER_PW}|" "${ETH_PROPS_DIR}${CONTACT_PROPS}"
+fi
+
+if [ -n "$CONSENT_REGISTRY_ADDRESS" ]; then
+    sed -i "s|0xC58238a482e929584783d13A684f56Ca5249243E|${CONSENT_REGISTRY_ADDRESS}|" "${ETH_PROPS_DIR}${HYE_PROPS}"
+fi
+
+if [ -n "$COMMUNITY_TAG_INDEX" ]; then
+    sed -i "s|0xeB510FB89C25cc1Af61fE45B965b5Fe27F1BCBa0|${COMMUNITY_TAG_INDEX}|" "${ETH_PROPS_DIR}${ETH_PROPS}"
+fi
+
+if [ -n "$USER_REGISTRY_ADDRESS" ]; then
+    sed -i "s|0x0e8acA05A8B35516504690Fa97fAEa69bbAFf901|${USER_REGISTRY_ADDRESS}|" "${ETH_PROPS_DIR}${ETH_PROPS}"
+fi
+
+if [ -n "$REPUTATION_REGISTRY_ADDRESS" ]; then
+    sed -i "s|0xd35284B7644732094338559c13a5CE880D247D37|${REPUTATION_REGISTRY_ADDRESS}|" "${ETH_PROPS_DIR}${ETH_PROPS}"
+fi
+
+if [ -n "$GROUP_REGISTRY_ADDRESS" ]; then
+    sed -i "s|0x1A37393184eD5D0040521728cBbfc819e07E9d20|${GROUP_REGISTRY_ADDRESS}|" "${ETH_PROPS_DIR}${ETH_PROPS}"
+fi
+
+if [ -n "$SERVICE_REGISTRY_ADDRESS" ]; then
+    sed -i "s|0x4930DC85997124F6cFBe8fAE727EA69E9577BBBc|${SERVICE_REGISTRY_ADDRESS}|" "${ETH_PROPS_DIR}${ETH_PROPS}"
+fi
+
+if [ -n "$WEBCONNECTOR_URL" ]; then
+    sed -i "s|http://localhost:8081/hye-youtube/|${WEBCONNECTOR_URL}|" "${ETH_PROPS_DIR}${HYE_PROPS}"
+fi
+
+if [ -n "$FRONTEND_URLS" ]; then
+    sed -i "s|frontendUrls =|frontendUrls = ${FRONTEND_URLS}|" "${ETH_PROPS_DIR}${HYE_PROPS}"
+fi
+
+if [ -z "$SLEEP_FOR" ]; then
+    SLEEP_FOR=30
+fi
+
+if [ -s "/app/las2peer/node-storage/migration.log" ]; then
+    echo Found old migration.log, importing...
+    cat /app/las2peer/node-storage/migration.log
+
+    cat /app/las2peer/node-storage/migration.log | grep -A5 "\(Deploying\|Replacing\|contract address\) \'\(CommunityTagIndex\|UserRegistry\|ServiceRegistry\|GroupRegistry\|ReputationRegistry\)\'" | grep '\(Deploying\|Replacing\|contract address\)' | tr -d " '>:" | sed -e '$!N;s/\n//;s/Deploying//;s/Replacing//;s/contractaddress/Address = /;s/./\l&/' >> "${ETH_PROPS_DIR}${ETH_PROPS}"
+
+    echo done.
+fi
+
+if [ -n "$LAS2PEER_BOOTSTRAP" ]; then
+    echo Skipping migration, contracts should already be deployed
+else
+    if [ -n "$LAS2PEER_ETH_HOST" ]; then
+        # echo Waiting for Ethereum client at $(host $LAS2PEER_ETH_HOST):$(port $LAS2PEER_ETH_HOST)...
+        # if waitForEndpoint $(host $LAS2PEER_ETH_HOST) $(port $LAS2PEER_ETH_HOST) 300; then
+            # echo Found Eth client.
+        if [ -s "/app/las2peer/node-storage/migration.log" ]; then
+            echo Migrated from logs.
+        else
+            # wait for seems broken somehow
+            truffleMigrate
+        fi
+        # else
+        #     echo Ethereum client not accessible. Aborting.
+        #     exit 2
+        # fi
     fi
+fi
+
+echo Serving config files at :8001 ...
+echo -e "\a" # ding
+cd /app/las2peer/
+pm2 start --silent http-server -- ./etc -p 8001
+
+cd /app/las2peer
+if [ -n "$LAS2PEER_BOOTSTRAP" ]; then
+    if waitForEndpoint $(host ${LAS2PEER_BOOTSTRAP}) $(port ${LAS2PEER_BOOTSTRAP}) 600; then
+        echo Las2peer bootstrap available, continuing.
+    else
+        echo Las2peer bootstrap specified but not accessible. Aborting.
+        exit 3
+    fi
+fi
+
+# it's realistic for different nodes to use different accounts (i.e., to have
+# different node operators). this function echos the N-th mnemonic if the
+# variable WALLET is set to N. If not, first mnemonic is used
+function selectMnemonic {
+    declare -a mnemonics=("differ employ cook sport clinic wedding melody column pave stuff oak price" "memory wrist half aunt shrug elbow upper anxiety maximum valve finish stay" "alert sword real code safe divorce firm detect donate cupboard forward other" "pair stem change april else stage resource accident will divert voyage lawn" "lamp elbow happy never cake very weird mix episode either chimney episode" "cool pioneer toe kiwi decline receive stamp write boy border check retire" "obvious lady prize shrimp taste position abstract promote market wink silver proof" "tired office manage bird scheme gorilla siren food abandon mansion field caution" "resemble cattle regret priority hen six century hungry rice grape patch family" "access crazy can job volume utility dial position shaft stadium soccer seven")
+    if [[ ${WALLET} =~ ^[0-9]+$ && ${WALLET} -lt ${#mnemonics[@]} ]]; then
+    # get N-th mnemonic
+        echo "${mnemonics[${WALLET}]}"
+    else
+        # note: zsh and others use 1-based indexing. this requires bash
+        echo "${mnemonics[0]}"
+    fi
+}
+
+#prepare pastry properties
+echo external_address = $(curl -s https://ipinfo.io/ip):${LAS2PEER_PORT} > etc/pastry.properties
+
+echo Starting las2peer node ...
+if [ -n "$LAS2PEER_ETH_HOST" ]; then
+    echo ... using ethereum boot procedure:
+    ${JAVA_HOME}/bin/java $([ -n "$ADDITIONAL_JAVA_ARGS" ] && echo $ADDITIONAL_JAVA_ARGS) -cp "core/src/main/resources/:core/export/jars/*:restmapper/export/jars/*:webconnector/export/jars/*:core/lib/*:restmapper/lib/*:webconnector/lib/*" --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.util=ALL-UNNAMED i5.las2peer.tools.L2pNodeLauncher \
+        --service-directory service \
+        --port $LAS2PEER_PORT \
+        $([ -n "$LAS2PEER_BOOTSTRAP" ] && echo "--bootstrap $LAS2PEER_BOOTSTRAP") \
+        --node-id-seed $NODE_ID_SEED \
+        --ethereum-mnemonic "$(selectMnemonic)" \
+        $(echo $ADDITIONAL_LAUNCHER_ARGS) \
+        startWebConnector \
+        "node=getNodeAsEthereumNode()" "registry=node.getRegistryClient()" "n=getNodeAsEthereumNode()" "r=n.getRegistryClient()" \
+        $(echo $ADDITIONAL_PROMPT_CMDS) \
+        interactive
+else
+    echo ... using non-ethereum boot procedure:
+    ${JAVA_HOME}/bin/java $(echo $ADDITIONAL_JAVA_ARGS) \
+        -cp "core/src/main/resources/:core/export/jars/*:restmapper/export/jars/*:webconnector/export/jars/*:core/lib/*:restmapper/lib/*:webconnector/lib/*" --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.util=ALL-UNNAMED i5.las2peer.tools.L2pNodeLauncher \
+        --service-directory service \
+        --port $LAS2PEER_PORT \
+        $([ -n "$LAS2PEER_BOOTSTRAP" ] && echo "--bootstrap $LAS2PEER_BOOTSTRAP") \
+        --node-id-seed $NODE_ID_SEED \
+        $(echo $ADDITIONAL_LAUNCHER_ARGS) \
+        startWebConnector \
+        $(echo $ADDITIONAL_PROMPT_CMDS) \
+        interactive
 fi

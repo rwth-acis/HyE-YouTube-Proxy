@@ -13,8 +13,10 @@ services:
     volumes:
       - ethereumStoragePersistent:/root/.ethereum/devchain
     command: /root/start.sh
-  truffle-migration:
+  las2peer:
     build: .
+    ports:
+      - 8080:8080
     environment:
       LAS2PEER_ETH_HOST: ethereum:8545
     depends_on:
