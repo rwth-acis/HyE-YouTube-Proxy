@@ -69,6 +69,10 @@ RUN git clone https://github.com/rwth-acis/las2peer.git
 WORKDIR /app/las2peer
 RUN git checkout tags/v1.2.1
 RUN mkdir -p /app/las2peer/restmapper/tmp && mkdir -p /app/las2peer/webconnector/tmp && mkdir -p /app/las2peer/log && mkdir -p /app/las2peer/node-storage
+RUN sed -i "s|javac|/opt/jdk17/bin/javac|" /app/las2peer/core/build.gradle
+RUN sed -i "s|javac|/opt/jdk17/bin/javac|" /app/las2peer/webconnector/build.gradle
+RUN sed -i "s|javac|/opt/jdk17/bin/javac|" /app/las2peer/restmapper/build.gradle
+RUN sed -i "s|javac|/opt/jdk17/bin/javac|" /app/las2peer/bundle/build.gradle
 RUN chmod +x gradlew && export JAVA_TOOL_OPTIONS="-Dfile.encoding=UTF8" && export JAVA_HOME=/opt/jdk17 && export PATH=$PATH:$JAVA_HOME && ./gradlew build --exclude-task test --exclude-task javadoc
 
 WORKDIR /app
