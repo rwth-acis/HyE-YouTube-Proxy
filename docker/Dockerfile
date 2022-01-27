@@ -42,6 +42,7 @@ RUN apt install -y git htop npm sed vim gradle && npm i -g pm2 http-server
 
 RUN useradd -ms /bin/bash build
 RUN mkdir -p /app && chown build:build /app
+RUN chown build:build /ms-playwright
 USER build
 WORKDIR /app
 RUN git clone https://github.com/ettore26/wait-for-command
@@ -110,6 +111,9 @@ WORKDIR /app
 RUN git clone https://github.com/rwth-acis/HyE-YouTube-Proxy.git
 WORKDIR /app/HyE-YouTube-Proxy
 RUN export JAVA_HOME=/opt/jdk17 && export PATH=$PATH:$JAVA_HOME/bin && export GRADLE_OPTS="-Dfile.encoding=utf-8" && ./gradlew --version && ./gradlew jar
-RUN cp youtube_proxy/export/jars/* /app/las2peer/service
+RUN cp youtube_proxy/export/jars/* /app/las2peer/core/lib
+
+# Unfortunately, playwright seems to require root privileges... That should be fixed, but who's got the time
+USER root
 
 ENTRYPOINT /app/start.sh
