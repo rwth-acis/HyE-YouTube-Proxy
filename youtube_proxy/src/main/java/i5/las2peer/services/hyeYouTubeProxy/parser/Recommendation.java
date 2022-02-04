@@ -19,6 +19,8 @@ public class Recommendation {
     private String thumbnail;
     // Link to profile picture of uploader
     private String avatar;
+    // Text describing the video length
+    private String length;
     // Text describing the amount of views
     private String views;
     // Text describing the upload date
@@ -34,6 +36,7 @@ public class Recommendation {
         this.channelLink = channelLink;
         this.thumbnail = "";
         this.avatar = "";
+        this.length = "";
         this.views = "";
         this.uploaded = "";
         this.description = "";
@@ -41,13 +44,14 @@ public class Recommendation {
 
     // Constructor with additional information
     public Recommendation(String title, String channelName, String link, String channelLink, String thumbnail,
-                          String avatar) {
+                          String avatar, String length) {
         this.title = title;
         this.channelName = channelName;
         this.link = link;
         this.channelLink = channelLink;
         this.thumbnail = thumbnail;
         this.avatar = avatar;
+        this.length = length;
         this.views = "";
         this.uploaded = "";
         this.description = "";
@@ -55,13 +59,14 @@ public class Recommendation {
 
     // Constructor with all information
     public Recommendation(String title, String channelName, String link, String channelLink, String thumbnail,
-                          String avatar, String views, String uploaded, String description) {
+                          String avatar, String length, String views, String uploaded, String description) {
         this.title = title;
         this.channelName = channelName;
         this.link = link;
         this.channelLink = channelLink;
         this.thumbnail = thumbnail;
         this.avatar = avatar;
+        this.length = length;
         this.views = views;
         this.uploaded = uploaded;
         this.description = description;
@@ -113,6 +118,14 @@ public class Recommendation {
 
     public void setAvatar(String avatar) {
         this.avatar = avatar;
+    }
+
+    public String getLength() {
+        return length;
+    }
+
+    public void setLength(String length) {
+        this.length = length;
     }
 
     public String getViews() {

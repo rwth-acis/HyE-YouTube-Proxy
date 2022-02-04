@@ -74,6 +74,8 @@ RUN sed -i "s|javac|/opt/jdk17/bin/javac|" /app/las2peer/core/build.gradle
 RUN sed -i "s|javac|/opt/jdk17/bin/javac|" /app/las2peer/webconnector/build.gradle
 RUN sed -i "s|javac|/opt/jdk17/bin/javac|" /app/las2peer/restmapper/build.gradle
 RUN sed -i "s|javac|/opt/jdk17/bin/javac|" /app/las2peer/bundle/build.gradle
+# change oidc client ID
+RUN sed -i "s|bdda7396-3f6d-4d83-ac21-65b4069d0eab|HyE-YouTube|" /app/las2peer/webconnector/frontend/src/components/app-index.ts
 RUN chmod +x gradlew && export JAVA_TOOL_OPTIONS="-Dfile.encoding=UTF8" && export JAVA_HOME=/opt/jdk17 && export PATH=$PATH:$JAVA_HOME && ./gradlew build --exclude-task test --exclude-task javadoc
 
 WORKDIR /app

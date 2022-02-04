@@ -212,7 +212,7 @@ public class YouTubeProxy extends RESTService {
 		}
 
 		// No cookies, no play
-		if (!hasCookies(l2pContext)) {
+		if (!(debug != null && debug.equals("true")) && !hasCookies(l2pContext)) {
 			browserContext.close();
 			response.addProperty("403",
 					"Please upload a valid set of YouTube cookies to use this service!");
@@ -274,6 +274,50 @@ public class YouTubeProxy extends RESTService {
 		ArrayList<Cookie> cookies = idm.getCookies(context, L2pUtil.getUserId((UserAgent) context.getMainAgent()),
 				rootUri, true);
 		return !(cookies == null || cookies.isEmpty());
+	}
+
+	/**
+	 * Checks whether the provided JsonArray contains valid cookies by checking response to YouTube profile page
+	 *
+	 * @param cookies JsonArray of YouTube session cookies
+	 * @return Reponse as JsonArray listing status and explanation whether cookie validation succeded
+	 */
+	private JsonObject validateCookies(JsonArray cookies) {
+		JsonObject responseObj = new JsonObject();
+		try {
+			HttpClient client = HttpClient.newHttpClient();
+			HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
+					.uri(URI.create(YOUTUBE_PROFILE_PAGE));
+			// Add cookies to request
+			String cookieString = "";
+			for (JsonElement cookieElem : cookies)
+			{
+				JsonObject cookie = cookieElem.getAsJsonObject();
+				cookieString += cookie.get("name").getAsString() + '=' + cookie.get("value").getAsString() + "; ";
+			}
+			requestBuilder.setHeader("Cookie", cookieString);
+			HttpResponse<String> response = client.send(requestBuilder.build(), HttpResponse.BodyHandlers.ofString());
+			if (response.statusCode() >= 300 && response.statusCode() != 304) {
+				// 30x means the user is presented with login screen, thus not logged in currently
+				responseObj.addProperty("status", 400);
+				responseObj.addProperty("msg", "Cookie validation failed.");
+				return responseObj;
+			} else if (response.statusCode() >= 400) {
+				// 4xx/5xx is bad, but not necessarily the cookies fault
+				responseObj.addProperty("status", 500);
+				responseObj.addProperty("msg", "Could not validate cookies.");
+				return responseObj;
+			}
+		} catch (Exception e) {
+			log.printStackTrace(e);
+			responseObj.addProperty("status", 500);
+			responseObj.addProperty("msg", "Could not validate cookies.");
+			return responseObj;
+		}
+		// 200 is what we want, 304 means cached which I assume also means no redirect
+		responseObj.addProperty("status", 200);
+		responseObj.addProperty("msg", "Cookies are valid.");
+		return responseObj;
 	}
 
 	/**
@@ -381,7 +425,10 @@ public class YouTubeProxy extends RESTService {
 			log.setLevel(Level.WARNING);
 
 		log.info("Initializing service...");
-		initialized = idm.initialize((ExecutionContext) Context.getCurrent(), consentRegistryAddress);
+
+		// In debug mode, use of blockchain is not enforced
+		initialized = (idm.initialize((ExecutionContext) Context.getCurrent(), consentRegistryAddress) ||
+				(debug != null && debug.equals("true")));
 		if (!initialized)
 			return buildResponse(500, "Initialization of smart contracts failed!");
 		else
@@ -585,11 +632,11 @@ public class YouTubeProxy extends RESTService {
 	/**
 	 * Function to retrieve the personal YouTube session cookies of the current user
 	 *
-	 * @return Returns an HTTP response containing the stored cookies as Json
+	 * @return Returns an HTTP response signaling whether valid cookies are available for given user
 	 */
 	@GET
 	@Path("/cookies")
-	@Produces(MediaType.APPLICATION_JSON)
+	@Produces(MediaType.TEXT_PLAIN)
 	@ApiResponses(
 			value = { @ApiResponse(
 					code = HttpURLConnection.HTTP_OK,
@@ -600,8 +647,7 @@ public class YouTubeProxy extends RESTService {
 	public Response getCookies() {
 		JsonObject response = new JsonObject();
 		if (!initialized) {
-			response.addProperty("500", "Service not initialized!");
-			return Response.serverError().entity(response.toString()).build();
+			return Response.serverError().entity("Service not initialized!").build();
 		}
 
 		JsonArray cookies = null;
@@ -611,19 +657,20 @@ public class YouTubeProxy extends RESTService {
 			context = (ExecutionContext) Context.getCurrent();
 			user = (UserAgent) context.getMainAgent();
 		} catch (Exception e) {
-			response.addProperty("401", "Could not get execution context. Are you logged in?");
-			return buildResponse(401, response.toString());
+			return buildResponse(401, "Could not get execution context. Are you logged in?");
 		}
 		try {
 			cookies = idm.getCookiesAsJson(context, L2pUtil.getUserId(user), rootUri, true);
 			if (cookies == null) {
-				return buildResponse(200, new JsonArray().toString());
+				return buildResponse(200, "No cookies found.");
 			}
 		} catch (Exception e) {
-			response.addProperty("500", "Error getting cookies.");
-			return buildResponse(500, response.toString());
+			return buildResponse(500, "Error getting cookies.");
 		}
-		return buildResponse(200, cookies.toString());
+
+		// Check cookie validity
+		response = validateCookies(cookies);
+		return buildResponse(response.get("status").getAsInt(), response.get("msg").getAsString());
 	}
 
 	/**
@@ -662,32 +709,11 @@ public class YouTubeProxy extends RESTService {
 		}
 
 		// Check cookie validity
-		try {
-			HttpClient client = HttpClient.newHttpClient();
-			HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
-					.uri(URI.create(YOUTUBE_PROFILE_PAGE));
-			// Add cookies to request
-			String cookieString = "";
-			for (JsonElement cookieElem : cookies)
-			{
-				JsonObject cookie = cookieElem.getAsJsonObject();
-				cookieString += cookie.get("name").getAsString() + '=' + cookie.get("value").getAsString() + "; ";
-			}
-			requestBuilder.setHeader("Cookie", cookieString);
-			HttpResponse<String> response = client.send(requestBuilder.build(), HttpResponse.BodyHandlers.ofString());
-			if (response.statusCode() >= 300) {
-				// 30x means the user is presented with login screen, thus not logged in currently
-				return buildResponse(400, "Cookie validation failed.");
-			} else if (response.statusCode() >= 400) {
-				// 4xx/5xx is bad, but not necessarily the cookies fault
-				return buildResponse(500, "Could not validate cookies.");
-			}
-		} catch (Exception e) {
-			log.printStackTrace(e);
-			return buildResponse(500, "Could not validate cookies.");
-		}
+		JsonObject response = validateCookies(cookies);
+		if (response.get("status").getAsInt() != 200)
+			return buildResponse(response.get("status").getAsInt(), response.get("msg").getAsString());
 
-		JsonObject response = idm.storeCookies(context, cookies);
+		response = idm.storeCookies(context, cookies);
 		return buildResponse(response.get("status").getAsInt(), response.get("msg").getAsString());
 	}
 

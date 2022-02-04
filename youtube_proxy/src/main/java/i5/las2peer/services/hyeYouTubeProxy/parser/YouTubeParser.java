@@ -16,6 +16,13 @@ import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 
+/**
+ * YouTubeParser
+ *
+ * This class parses the HTML responses send in response to the automated requests to YouTube using Playwright in order
+ * to obtain personalized recommendations using Jsoup.
+ */
+
 public abstract class YouTubeParser {
 
     private final static String METADATA_CLASS = "ytd-video-meta-block";
@@ -26,7 +33,13 @@ public abstract class YouTubeParser {
 
     private static final L2pLogger log = L2pLogger.getInstance(YouTubeProxy.class.getName());
 
-    // Helper function used to find the given object key in the given html code and convert its value into a Json object
+    /**
+     * Helper function used to find the given object key in the given html code and convert its value into a Json object
+     *
+     * @param html Raw html returned in response to automated browser request
+     * @param mainObjKey The string used to identify the beginning of the Json object containing the relevant data
+     * @return Relevant video information for all YouTube recommendations displayed on given page as Json object
+     */
     private static JsonObject getMainObject(String html, String mainObjKey) {
         int htmlLength = html.length();
 
@@ -68,7 +81,12 @@ public abstract class YouTubeParser {
         return mainObj;
     }
 
-    // Helper function iterating over given array and trying to convert data into recommendations
+    /**
+     * Helper function iterating over given array and trying to convert data into recommendations
+     *
+     * @param contents Element contained in response to request to YouTube holding video data
+     * @return Relevant video information for all YouTube recommendations displayed on given page as array list
+     */
     private static ArrayList<Recommendation> parseRecsFromContents(JsonArray contents) {
         ArrayList<Recommendation> recs = new ArrayList<Recommendation>();
         Iterator<JsonElement> it = contents.iterator();
@@ -252,22 +270,23 @@ public abstract class YouTubeParser {
      */
     public static ArrayList<Recommendation> resultsPage(String html) {
         ArrayList<Recommendation> recs = new ArrayList<Recommendation>();
-        Document doc = Jsoup.parse(html);
-        Element body = doc.body();
-        Elements thumbnails = body.getElementsByTag(THUMBNAIL_TAG);
-        Iterator<Element> it = thumbnails.iterator();
-        while (it.hasNext()) {
-            Element recommendation = it.next().parent();
-            Elements imgs = recommendation.getElementsByTag(IMAGE_TAG);
-            Elements links = recommendation.getElementsByTag(LINK_TAG);
-            Elements metaBlock = recommendation.getElementsByTag(METADATA_CLASS);
-
-            Recommendation rec = RecommendationBuilder.build(imgs, links, metaBlock);
-            if (rec == null)
-                log.info("Error creating recommendation object from HTML data");
-            else
-                recs.add(rec);
-        }
+        // This seems to cause problems sometimes
+        // Document doc = Jsoup.parse(html);
+        // Element body = doc.body();
+        // Elements thumbnails = body.getElementsByTag(THUMBNAIL_TAG);
+        // Iterator<Element> it = thumbnails.iterator();
+        // while (it.hasNext()) {
+        //     Element recommendation = it.next().parent();
+        //     Elements imgs = recommendation.getElementsByTag(IMAGE_TAG);
+        //     Elements links = recommendation.getElementsByTag(LINK_TAG);
+        //     Elements metaBlock = recommendation.getElementsByTag(METADATA_CLASS);
+        //
+        //     Recommendation rec = RecommendationBuilder.build(imgs, links, metaBlock);
+        //     if (rec == null)
+        //         log.info("Error creating recommendation object from HTML data");
+        //     else
+        //         recs.add(rec);
+        // }
 
         // If no recommendations were found, try another way
         if (recs.isEmpty())

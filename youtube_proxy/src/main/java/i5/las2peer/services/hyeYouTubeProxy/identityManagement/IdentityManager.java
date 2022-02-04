@@ -28,6 +28,12 @@ import java.io.FileReader;
 import java.io.Serializable;
 import java.util.*;
 
+/**
+ * IdentityManager.
+ *
+ * This class is managing the YouTube cookies and access permissions.
+ */
+
 public class IdentityManager {
 
     private String cookieFile;
@@ -45,7 +51,12 @@ public class IdentityManager {
     private final String YOUTUBE_COOKIE_DOMAIN = ".youtube.com";
     private final String YOUTUBE_COOKIE_PATH = "/";
 
-    // Constructor setting up storage
+    /**
+     * Constructor
+     *
+     * @param cookieFile Local file path containing static set of cookies (used for debugging)
+     * @param headerFile Local file path containing static set of headers (used for debugging)
+     */
     public IdentityManager(String cookieFile, String headerFile) {
         this.cookieFile = cookieFile;
         this.headerFile = headerFile;
@@ -169,7 +180,7 @@ public class IdentityManager {
     }
 
     /**
-     * Checks the validity of the cookies stored in the given Json array
+     * Checks the format of the cookies stored in the given Json array
      *
      * @param cookies A Json array of containing cookies data
      * @return A Json array where invalid cookies were removed

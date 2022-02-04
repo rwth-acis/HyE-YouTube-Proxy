@@ -9,6 +9,12 @@ import i5.las2peer.logging.L2pLogger;
 
 import java.io.Serializable;
 
+/**
+ * L2pUtil
+ *
+ * Contains a collection of generally useful las2peer related functionality
+ */
+
 public abstract class L2pUtil {
 
 

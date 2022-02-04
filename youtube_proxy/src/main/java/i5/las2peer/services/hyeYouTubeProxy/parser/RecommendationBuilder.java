@@ -8,6 +8,11 @@ import org.jsoup.select.Elements;
 
 import java.util.HashMap;
 
+/**
+ * RecommendationBuilder.
+ *
+ * Wrapper class simplifying generation of YouTube recommendations.
+ */
 public abstract class RecommendationBuilder {
 
     private final static String TITLE_KEY = "title";
@@ -16,7 +21,12 @@ public abstract class RecommendationBuilder {
 
     private static final L2pLogger log = L2pLogger.getInstance(YouTubeProxy.class.getName());
 
-    // Helper function extracting view data from messy description text
+    /**
+     * Helper function extracting view data from messy description text
+     *
+     * @param metaBlock Part of YouTube video description containing view count
+     * @return Number of video views as string (e.g., 812, 10k, 1M)
+     */
     private static String getViews(String metaBlock) {
         String[] parts = metaBlock.split("•");
         if (parts.length < 2) {
@@ -36,7 +46,12 @@ public abstract class RecommendationBuilder {
         return views;
     }
 
-    // Helper function extracting information about upload date from messy description text
+    /**
+     * Helper function extracting information about upload date from messy description text
+     *
+     * @param metaBlock Part of YouTube video description containing upload date
+     * @return Upload date of video as string (e.g., 2 days/5 minutes/10 years ago)
+     */
     private static String getUploaded(String metaBlock) {
         String[] parts = metaBlock.split("•");
         if (parts.length < 2) {
@@ -56,7 +71,12 @@ public abstract class RecommendationBuilder {
         return uploaded;
     }
 
-    // Helper function extracting video relevant data from messy text
+    /**
+     * Helper function extracting video relevant data from messy text
+     *
+     * @param rawDescription Text block displayed under YouTube video recommendation containing video information
+     * @return HashMap pf video title, channel, view count, and upload date
+     */
     private static HashMap getVideoDetails(String rawDescription) {
         HashMap<String, String> result = new HashMap<String, String>();
 
@@ -150,7 +170,14 @@ public abstract class RecommendationBuilder {
         return result;
     }
 
-    // Helper method getting recommendation data from recommendation displayed on main page
+    /**
+     * Helper method getting recommendation data from recommendation displayed on main page
+     *
+     * @param links HTML anchor elements (a) i.e., links related to the given video
+     * @param imgs HTML image elements (img) related to the given video
+     * @param metaBlock Specific HTML div element related to given video containing upload date and view information
+     * @return YouTube Recommendation object with relevant video data
+     */
     public static Recommendation build(Elements links, Elements imgs, Elements metaBlock) {
         Recommendation rec;
         if (metaBlock.size() < 1) {
@@ -185,7 +212,13 @@ public abstract class RecommendationBuilder {
         return rec;
     }
 
-    // Helper method getting recommendation data from recommendation displayed on video page
+    /**
+     * Helper method getting recommendation data from recommendation displayed on video page
+     *
+     * @param links HTML anchor elements (a) i.e., links related to the given video
+     * @param imgs HTML image elements (img) related to the given video
+     * @return YouTube Recommendation object with relevant video data
+     */
     public static Recommendation build(Elements links, Elements imgs) {
         Recommendation rec;
         if (imgs.size() < 2) {
@@ -211,6 +244,7 @@ public abstract class RecommendationBuilder {
                     "",
                     imgs.get(0).attr(SOURCE_KEY),
                     "",
+                    "",
                     videoDetails.get("views").toString(),
                     videoDetails.get("uploaded").toString(),
                     ""
@@ -223,7 +257,12 @@ public abstract class RecommendationBuilder {
         return rec;
     }
 
-    // Helper method getting recommendation data from JavaScript code sent in response to requesting main page
+    /**
+     * Helper method getting recommendation data from JavaScript code sent in response to requesting YouTube page
+     *
+     * @param obj Json Object sent along with HTML response to YouTube containing all the relevant video data
+     * @return YouTube Recommendation object with relevant video data
+     */
     public static Recommendation build(JsonObject obj) {
         Recommendation rec = null;
 
@@ -251,6 +290,7 @@ public abstract class RecommendationBuilder {
                                 .get("channelThumbnailWithLinkRenderer").getAsJsonObject().get("thumbnail")
                                 .getAsJsonObject().get("thumbnails").getAsJsonArray().get(0).getAsJsonObject()
                                 .get("url").getAsString(),
+                        obj.get("lengthText").getAsJsonObject().get("simpleText").getAsString(),
                         obj.get("viewCountText").getAsJsonObject().get("simpleText").getAsString(),
                         obj.get("publishedTimeText").getAsJsonObject().get("simpleText").getAsString(),
                         obj.get("descriptionSnippet").getAsJsonObject().get("runs").getAsJsonArray().get(0)
@@ -278,6 +318,7 @@ public abstract class RecommendationBuilder {
                                 .getAsJsonObject().get("url").getAsString(),
                         obj.get("channelThumbnail").getAsJsonObject().get("thumbnails").getAsJsonArray().get(0)
                                 .getAsJsonObject().get("url").getAsString(),
+                        obj.get("lengthText").getAsJsonObject().get("simpleText").getAsString(),
                         obj.get("viewCountText").getAsJsonObject().get("simpleText").getAsString(),
                         obj.get("publishedTimeText").getAsJsonObject().get("simpleText").getAsString(),
                         ""
@@ -289,7 +330,6 @@ public abstract class RecommendationBuilder {
         else if (obj.has("videoRenderer")) {
             try {
                 obj = obj.get("videoRenderer").getAsJsonObject();
-
                 // Try to create object
                 rec = new Recommendation(
                         obj.get("title").getAsJsonObject().get("runs").getAsJsonArray().get(0).getAsJsonObject()
@@ -307,6 +347,7 @@ public abstract class RecommendationBuilder {
                                 .get("channelThumbnailWithLinkRenderer").getAsJsonObject().get("thumbnail")
                                 .getAsJsonObject().get("thumbnails").getAsJsonArray().get(0).getAsJsonObject()
                                 .get("url").getAsString(),
+                        obj.get("lengthText").getAsJsonObject().get("simpleText").getAsString(),
                         obj.get("viewCountText").getAsJsonObject().get("simpleText").getAsString(),
                         obj.get("publishedTimeText").getAsJsonObject().get("simpleText").getAsString(),
                         obj.get("detailedMetadataSnippets").getAsJsonArray().get(0).getAsJsonObject().get("snippetText")
