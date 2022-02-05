@@ -233,7 +233,9 @@ public class IdentityManager {
                         cookieObj.get("name").getAsString(),
                         cookieObj.get("value").getAsString())
                         .setDomain(cookieObj.get("domain").getAsString())
-                        .setPath(cookieObj.get("path").getAsString()));
+                        .setPath(cookieObj.get("path").getAsString())
+                        // Cookies which name start with underscore, have to be secure
+                        .setSecure(cookieObj.get("name").getAsString().startsWith("_")));
             }
         } catch (Exception e) {
             return null;
@@ -316,6 +318,17 @@ public class IdentityManager {
             log.printStackTrace(e);
             return null;
         }
+    }
+
+    /**
+     * Kind of a hacky function, but it's required right now
+     *
+     * @param context The current execution context required to fetch the cookies accessible to the current user
+     * @param ownerId The las2peer ID of the user whose cookies are requested
+     * @return Valid YouTube cookies stored for the requested user if requesting user has required permissions
+     */
+    private ArrayList<Cookie> getCookies(ExecutionContext context, String ownerId) {
+        return getCookies(context, ownerId, YouTubeProxy.ROOT_URI, true);
     }
 
     public JsonArray getCookiesAsJson(ExecutionContext context, String ownerId, String reqUri, boolean anon) {
@@ -404,32 +417,32 @@ public class IdentityManager {
 
         try {
             Envelope cookieEnv = context.requestEnvelope(getCookieHandle(ownerId));
-            Envelope permissionsEnv = context.requestEnvelope(getPermissionsHandle(context.getServiceAgent()),
-                    context.getServiceAgent());
-            permissionMap = (HashMap<String, HashSet<String>>)
-                    permissionsEnv.getContent();
-
-            // Remove given user from permission sets (this might be plenty inefficient)
-            Iterator<String> mapIt = permissionMap.keySet().iterator();
-            while (mapIt.hasNext()) {
-                String readerId = mapIt.next();
-
-                // Remove users as readers from cookie envelope
-                UserAgent reader = L2pUtil.getUserAgent(context, readerId, log);
-                if (cookieEnv.hasReader(reader)) {
-                    cookieEnv.revokeReader(reader);
-                }
-
-                // Remove current user from users' permission list
-                HashSet<String> permissions = permissionMap.get(readerId);
-                if (permissions != null && permissions.contains(ownerId)) {
-                    permissions.remove(ownerId);
-                    permissionMap.put(readerId, permissions);
-                }
-            }
-
-            permissionsEnv.setContent(permissionMap);
-            context.storeEnvelope(permissionsEnv, context.getServiceAgent());
+//            Envelope permissionsEnv = context.requestEnvelope(getPermissionsHandle(context.getServiceAgent()),
+//                    context.getServiceAgent());
+//            permissionMap = (HashMap<String, HashSet<String>>)
+//                    permissionsEnv.getContent();
+//
+//            // Remove given user from permission sets (this might be plenty inefficient)
+//            Iterator<String> mapIt = permissionMap.keySet().iterator();
+//            while (mapIt.hasNext()) {
+//                String readerId = mapIt.next();
+//
+//                // Remove users as readers from cookie envelope
+//                UserAgent reader = L2pUtil.getUserAgent(context, readerId, log);
+//                if (cookieEnv.hasReader(reader) && !readerId.equals(ownerId)) {
+//                    cookieEnv.revokeReader(reader);
+//                }
+//
+//                // Remove current user from users' permission list
+//                HashSet<String> permissions = permissionMap.get(readerId);
+//                if (permissions != null && permissions.contains(ownerId)) {
+//                    permissions.remove(ownerId);
+//                    permissionMap.put(readerId, permissions);
+//                }
+//            }
+//
+//            permissionsEnv.setContent(permissionMap);
+//            context.storeEnvelope(permissionsEnv, context.getServiceAgent());
             cookieEnv.setContent(null);
             context.storeEnvelope(cookieEnv);
         } catch (Exception e) {
@@ -442,13 +455,15 @@ public class IdentityManager {
         // Also delete headers, if some were stored
         try {
             Envelope headerEnv = context.requestEnvelope(getHeaderHandle(ownerId));
-            Iterator<String> mapIt = permissionMap.keySet().iterator();
-            while (mapIt.hasNext()) {
-                UserAgent reader = L2pUtil.getUserAgent(context, mapIt.next(), log);
-                if (headerEnv.hasReader(reader)) {
-                    headerEnv.revokeReader(reader);
-                }
-            }
+//            Iterator<String> mapIt = permissionMap.keySet().iterator();
+//            while (mapIt.hasNext()) {
+//                String readerId = mapIt.next();
+//                UserAgent reader = L2pUtil.getUserAgent(context, readerId, log);
+//                if (headerEnv.hasReader(reader) && !readerId.equals(ownerId)) {
+//                    headerEnv.revokeReader(reader);
+//                }
+//            }
+            headerEnv.setContent(null);
             context.storeEnvelope(headerEnv);
         } catch (Exception e) {
             log.printStackTrace(e);
@@ -546,7 +561,13 @@ public class IdentityManager {
         try {
             HashMap<String, HashSet<String>> permissionMap = (HashMap<String, HashSet<String>>) context.requestEnvelope(
                     getPermissionsHandle(context.getServiceAgent()), context.getServiceAgent()).getContent();
-            return permissionMap.get(L2pUtil.getUserId((UserAgent) context.getMainAgent()));
+            // only return users who have valid cookies stored!
+            HashSet<String> result = permissionMap.get(L2pUtil.getUserId((UserAgent) context.getMainAgent()));
+            for (String ownerId : result) {
+                if (getCookies(context, ownerId) == null)
+                    result.remove(ownerId);
+            }
+            return result;
         } catch (Exception e) {
             log.printStackTrace(e);
             return null;
@@ -836,10 +857,13 @@ public class IdentityManager {
             Iterator<JsonElement> it = readerIds.iterator();
             while (it.hasNext()) {
                 readerId = it.next().getAsString();
+                if (readerId.equals(ownerId))
+                    continue;
                 UserAgent reader = L2pUtil.getUserAgent(context, readerId, log);
 
                 // Update readers of cookie envelope
-                cookieEnv.revokeReader(reader);
+                if (cookieEnv.hasReader(reader) && !readerId.equals(ownerId))
+                    cookieEnv.revokeReader(reader);
 
                 // Update list of cookies, reader may access
                 HashSet<String> permissionSet = permissionMap.get(readerId);
@@ -853,7 +877,7 @@ public class IdentityManager {
         } catch (Exception e) {
             log.printStackTrace(e);
             response.addProperty("status", 500);
-            response.addProperty("msg", "Error adding reader " + readerId);
+            response.addProperty("msg", "Error removing reader " + readerId);
             return response;
         }
 
@@ -862,14 +886,17 @@ public class IdentityManager {
             Envelope headerEnv = context.requestEnvelope(getHeaderHandle(ownerId));
             Iterator<JsonElement> it = readerIds.iterator();
             while (it.hasNext()) {
-                headerEnv.revokeReader(L2pUtil.getUserAgent(context, it.next().getAsString(), log));
+                readerId = it.next().getAsString();
+                UserAgent reader = L2pUtil.getUserAgent(context, readerId, log);
+                if (headerEnv.hasReader(reader) && !readerId.equals(ownerId))
+                    headerEnv.revokeReader(L2pUtil.getUserAgent(context, readerId, log));
             }
             context.storeEnvelope(headerEnv);
         } catch (Exception e) {
             log.printStackTrace(e);
         }
         response.addProperty("status", 200);
-        response.addProperty("msg", "Readers successfully added.");
+        response.addProperty("msg", "Readers successfully removed.");
         return response;
     }
 }

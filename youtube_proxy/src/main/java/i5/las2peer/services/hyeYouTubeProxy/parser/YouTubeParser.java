@@ -270,23 +270,23 @@ public abstract class YouTubeParser {
      */
     public static ArrayList<Recommendation> resultsPage(String html) {
         ArrayList<Recommendation> recs = new ArrayList<Recommendation>();
-        // This seems to cause problems sometimes
-        // Document doc = Jsoup.parse(html);
-        // Element body = doc.body();
-        // Elements thumbnails = body.getElementsByTag(THUMBNAIL_TAG);
-        // Iterator<Element> it = thumbnails.iterator();
-        // while (it.hasNext()) {
-        //     Element recommendation = it.next().parent();
-        //     Elements imgs = recommendation.getElementsByTag(IMAGE_TAG);
-        //     Elements links = recommendation.getElementsByTag(LINK_TAG);
-        //     Elements metaBlock = recommendation.getElementsByTag(METADATA_CLASS);
-        //
-        //     Recommendation rec = RecommendationBuilder.build(imgs, links, metaBlock);
-        //     if (rec == null)
-        //         log.info("Error creating recommendation object from HTML data");
-        //     else
-        //         recs.add(rec);
-        // }
+        // This seems to cause problems sometimes ...
+        Document doc = Jsoup.parse(html);
+        Element body = doc.body();
+        Elements thumbnails = body.getElementsByTag(THUMBNAIL_TAG);
+        Iterator<Element> it = thumbnails.iterator();
+        while (it.hasNext()) {
+            Element recommendation = it.next().parent();
+            Elements imgs = recommendation.getElementsByTag(IMAGE_TAG);
+            Elements links = recommendation.getElementsByTag(LINK_TAG);
+            Elements metaBlock = recommendation.getElementsByTag(METADATA_CLASS);
+       
+            Recommendation rec = RecommendationBuilder.build(imgs, links, metaBlock);
+            if (rec == null)
+                log.info("Error creating recommendation object from HTML data");
+            else
+                recs.add(rec);
+        }
 
         // If no recommendations were found, try another way
         if (recs.isEmpty())

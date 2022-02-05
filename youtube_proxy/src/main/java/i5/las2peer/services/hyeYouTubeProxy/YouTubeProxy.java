@@ -100,6 +100,8 @@ public class YouTubeProxy extends RESTService {
 	private static Random rand = null;
 	private ArrayList<String> corsAddresses;
 
+	public static String ROOT_URI;
+
 	/**
 	 * Class constructor, initializes member variables
 	 */
@@ -128,6 +130,10 @@ public class YouTubeProxy extends RESTService {
 			corsAddresses = new ArrayList<String>();
 		} else {
 			corsAddresses = new ArrayList<String>(Arrays.asList(frontendUrls.split(",")));
+		}
+
+		if (ROOT_URI == null && rootUri != null) {
+			ROOT_URI = rootUri;
 		}
 	}
 
@@ -239,7 +245,18 @@ public class YouTubeProxy extends RESTService {
 		}
 
 		try {
-			browserContext.addCookies(cookies);
+				// TODO clean this part up a bit
+		        log.info("Setting cookies:");
+		        for (Cookie cookie : cookies) {
+					log.info(cookie.name + ": " + cookie.value);
+					ArrayList<Cookie> singleCookieList = new ArrayList<Cookie>();
+					singleCookieList.add(cookie);
+					try {
+    					    browserContext.addCookies(singleCookieList);
+    					} catch (Exception e) {
+    					    log.printStackTrace(e);
+    					}
+				}
 			if (headers != null)
 				browserContext.setExtraHTTPHeaders(headers);
 		} catch (Exception e) {
@@ -269,7 +286,7 @@ public class YouTubeProxy extends RESTService {
 	 * @param context Current las2peer execution context
 	 * @return Whether given user currently stores valid YouTube cookies
 	 */
-	private boolean	hasCookies(ExecutionContext context) {
+	private boolean hasCookies(ExecutionContext context) {
 		// Owner should have access regardless off specific resource (request Uri and anonymous)
 		ArrayList<Cookie> cookies = idm.getCookies(context, L2pUtil.getUserId((UserAgent) context.getMainAgent()),
 				rootUri, true);
@@ -368,7 +385,7 @@ public class YouTubeProxy extends RESTService {
 	private JsonObject setUserPreference(ExecutionContext context, String ownerId) {
 		JsonObject response = new JsonObject();
 		UserAgent user = null;
-		if (ownerId == null) {
+		if (ownerId == null || ownerId.length() == 0) {
 			ownerId = "";
 		}
 		try {
@@ -382,8 +399,8 @@ public class YouTubeProxy extends RESTService {
 
 		// Unless owner is empty check consent first
 		JsonArray permissions = ParserUtil.toJsonArray(getReader().getEntity().toString());
-		if (ownerId.length() > 0 && (permissions == null ||
-		  !permissions.contains(ParserUtil.toJsonElement(ownerId)))) {
+		if (permissions == null ||
+		  !permissions.contains(ParserUtil.toJsonElement(ownerId))) {
 			// No permission
 			response.addProperty("status", 403);
 			response.addProperty("msg","Lacking permissions to access requested cookies.");

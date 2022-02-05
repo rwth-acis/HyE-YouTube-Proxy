@@ -70,6 +70,7 @@ Below, a table with the configuration options and their purpose is provided.
 | `headerFile` | Local file path | Yes | If set, the headers used for requests sent to YouTube will be read from the provided file instead of the las2peer storage (debug has to be set to `true` in order to use this option)|
 | `frontendUrls` | Comma separated list of Web domains | Yes | The provided addresses are added as *Access-Control-Allow-Origin* headers to all responses sent by the service |
 
+***Note: if cookieFile file is set but not headerFile or vice versa, neither one is regarded thus, always set both cookie- and headerFile for debugging***
 
 ## Development
 Note that the class `i5.las2peer.services.hyeYouTubeProxy.identityManagement.ConsentRegistry` was generated automatically from the Smart Contract file written in [Solidity](https://soliditylang.org/) residing at `./docker/registry-contracts/contracts/ConsentRegistry.sol`.
