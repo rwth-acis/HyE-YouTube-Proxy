@@ -66,7 +66,7 @@ import com.microsoft.playwright.options.Cookie;
 @SwaggerDefinition(
 		info = @Info(
 				title = "YouTube Data Proxy",
-				version = "0.1.15",
+				version = "0.2.0",
 				description = "Part of How's your Experience. Used to obtain data from YouTube.",
 				termsOfService = "http://your-terms-of-service-url.com",
 				contact = @Contact(
@@ -92,6 +92,8 @@ public class YouTubeProxy extends RESTService {
 	private String consentRegistryAddress;
 	private String rootUri;
 	private String frontendUrls;
+	private String serviceAgentName;
+	private String serviceAgentPw;
 
 	private static final L2pLogger log = L2pLogger.getInstance(YouTubeProxy.class.getName());
 	private static Browser browser = null;
@@ -109,7 +111,8 @@ public class YouTubeProxy extends RESTService {
 		setFieldValues();
 		log.info("Got properties: debug = " + debug + ", cookieFile = " + cookieFile + ", headerFile = " +
 				headerFile + ", consentRegistryAddress = " + consentRegistryAddress + ", rootUri = " + rootUri +
-				", frontendUrls = " + frontendUrls);
+				", frontendUrls = " + frontendUrls + ", serviceAgentName = " + serviceAgentName +
+				", serviceAgentPw = " + serviceAgentPw);
 
 		if (browser == null) {
 			Playwright playwright = Playwright.create();
@@ -135,6 +138,9 @@ public class YouTubeProxy extends RESTService {
 		if (ROOT_URI == null && rootUri != null) {
 			ROOT_URI = rootUri;
 		}
+
+		if (serviceAgentName == null || serviceAgentPw == null)
+			log.severe("Cannot initialize service without service agent credentials!");
 	}
 
 	private String getVideoUrl(String videoId) {
@@ -163,12 +169,15 @@ public class YouTubeProxy extends RESTService {
 
 		// Get users whose cookies we have access to
 		HashSet<String> candidates = idm.getPermissions(context);
+		String matchedUserId = "";
 
 		try {
 			// RMI call with parameters
-			return (String) context.invoke(
+			matchedUserId = (String) context.invoke(
 					"i5.las2peer.services.hyeYouTubeRecommendations.YouTubeRecommendations", "findMatch",
 					new Serializable[] { candidates, request });
+			if (matchedUserId != null)
+				return matchedUserId;
 		} catch (Exception e) {
 			log.printStackTrace(e);
 		}
@@ -176,27 +185,26 @@ public class YouTubeProxy extends RESTService {
 		// If recommendation service isn't running, try to get random user
 		// TODO repeat if chosen user did not consent to this particular request
 		String readerId = L2pUtil.getUserId((UserAgent) context.getMainAgent());
-		String userId = "";
 		while (candidates != null && candidates.size() > 0) {
 			// Get random candidate
 			Iterator<String> it = candidates.iterator();
 			int randPos = rand.nextInt(candidates.size());
 			while (it.hasNext() && randPos >= 0) {
-				userId = it.next();
+				matchedUserId = it.next();
 				--randPos;
 			}
 			// Check for permission
-			if (idm.checkConsent(new Consent(userId, readerId, rootUri, true))) {
+			if (idm.checkConsent(new Consent(matchedUserId, readerId, rootUri, true))) {
 				break;
 			} else {
 				// Go again
-				candidates.remove(userId);
-				userId = "";
+				candidates.remove(matchedUserId);
+				matchedUserId = "";
 			}
 		}
 
 		// Return current user if even this didn't yield a result
-		return userId.length() > 0 ? userId : readerId;
+		return matchedUserId.length() > 0 ? matchedUserId : readerId;
 	}
 
 	/**
@@ -399,8 +407,8 @@ public class YouTubeProxy extends RESTService {
 
 		// Unless owner is empty check consent first
 		JsonArray permissions = ParserUtil.toJsonArray(getReader().getEntity().toString());
-		if (permissions == null ||
-		  !permissions.contains(ParserUtil.toJsonElement(ownerId))) {
+		if (ownerId.length() > 0 && (permissions == null ||
+		  !permissions.contains(ParserUtil.toJsonElement(ownerId)))) {
 			// No permission
 			response.addProperty("status", 403);
 			response.addProperty("msg","Lacking permissions to access requested cookies.");
@@ -444,8 +452,8 @@ public class YouTubeProxy extends RESTService {
 		log.info("Initializing service...");
 
 		// In debug mode, use of blockchain is not enforced
-		initialized = (idm.initialize((ExecutionContext) Context.getCurrent(), consentRegistryAddress) ||
-				(debug != null && debug.equals("true")));
+		initialized = (idm.initialize((ExecutionContext) Context.getCurrent(), consentRegistryAddress,
+				serviceAgentName, serviceAgentPw) || (debug != null && debug.equals("true")));
 		if (!initialized)
 			return buildResponse(500, "Initialization of smart contracts failed!");
 		else

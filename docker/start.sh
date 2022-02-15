@@ -100,7 +100,7 @@ if [ -n "$SERVICE_REGISTRY_ADDRESS" ]; then
 fi
 
 if [ -n "$WEBCONNECTOR_URL" ]; then
-    sed -i "s|http://localhost:8081/hye-youtube/|${WEBCONNECTOR_URL}|" "${ETH_PROPS_DIR}${HYE_PROPS}"
+    sed -i "s|http://localhost:8080/hye-youtube/|${WEBCONNECTOR_URL}|" "${ETH_PROPS_DIR}${HYE_PROPS}"
 fi
 
 if [ -n "$FRONTEND_URLS" ]; then
