@@ -44,7 +44,7 @@ public class IdentityManager {
     private ReadWriteRegistryClient registryClient;
     private ConsentRegistry consentRegistry;
     private String serviceAgentName;
-    private String getServiceAgentPw;
+    private String serviceAgentPw;
 
     private final String COOKIE_SUFFIX = "_cookies";
     private final String HEADER_SUFFIX = "_headers";
@@ -265,6 +265,9 @@ public class IdentityManager {
      *
      * @param context Current execution context from which the method is called
      * @param consentRegistryAddress The blockchain address where the consent registry contracts are stored
+     * @param serviceAgentName The user agent name of the las2peer agent created to manage the envelopes
+     *	holding persistent service information
+     * @param serviceAgentPw The user agent password required to unlock this service agent
      * @return Whether initialization was successful
      */
     public boolean initialize(ExecutionContext context, String consentRegistryAddress, String serviceAgentName,
@@ -284,7 +287,7 @@ public class IdentityManager {
                 return false;
             }
             this.serviceAgentName = serviceAgentName;
-            this.getServiceAgentPw = serviceAgentPw;
+            this.serviceAgentPw = serviceAgentPw;
         } catch (Exception e) {
             log.warning("Initialization failed!");
             log.printStackTrace(e);
@@ -567,7 +570,7 @@ public class IdentityManager {
         try {
             UserAgent serviceAgent = (UserAgent) context.fetchAgent(
                     context.getUserAgentIdentifierByLoginName(serviceAgentName));
-            serviceAgent.unlock(getServiceAgentPw);
+            serviceAgent.unlock(serviceAgentPw);
             HashMap<String, HashSet<String>> permissionMap = (HashMap<String, HashSet<String>>) context.requestEnvelope(
                     getPermissionsHandle(L2pUtil.getUserId(serviceAgent)), serviceAgent).getContent();
             // only return users who have valid cookies stored!
@@ -791,7 +794,7 @@ public class IdentityManager {
         try {
             UserAgent serviceAgent = (UserAgent) context.fetchAgent(
                     context.getUserAgentIdentifierByLoginName(serviceAgentName));
-            serviceAgent.unlock(getServiceAgentPw);
+            serviceAgent.unlock(serviceAgentPw);
             Envelope cookieEnv = context.requestEnvelope(getCookieHandle(ownerId));
             Envelope permissionsEnv = context.requestEnvelope(getPermissionsHandle(L2pUtil.getUserId(serviceAgent)),
                     serviceAgent);
@@ -815,7 +818,7 @@ public class IdentityManager {
             }
             context.storeEnvelope(cookieEnv);
             permissionsEnv.setContent(permissionMap);
-            context.storeEnvelope(permissionsEnv, context.getServiceAgent());
+            context.storeEnvelope(permissionsEnv, serviceAgent);
         } catch (Exception e) {
             log.printStackTrace(e);
             response.addProperty("status", 500);
@@ -862,7 +865,7 @@ public class IdentityManager {
         try {
             UserAgent serviceAgent = (UserAgent) context.fetchAgent(
                     context.getUserAgentIdentifierByLoginName(serviceAgentName));
-            serviceAgent.unlock(getServiceAgentPw);
+            serviceAgent.unlock(serviceAgentPw);
             Envelope cookieEnv = context.requestEnvelope(getCookieHandle(ownerId));
             Envelope permissionsEnv = context.requestEnvelope(getPermissionsHandle(L2pUtil.getUserId(serviceAgent)),
                     serviceAgent);
@@ -888,7 +891,7 @@ public class IdentityManager {
             }
             context.storeEnvelope(cookieEnv);
             permissionsEnv.setContent(permissionMap);
-            context.storeEnvelope(permissionsEnv, context.getServiceAgent());
+            context.storeEnvelope(permissionsEnv, serviceAgent);
         } catch (Exception e) {
             log.printStackTrace(e);
             response.addProperty("status", 500);

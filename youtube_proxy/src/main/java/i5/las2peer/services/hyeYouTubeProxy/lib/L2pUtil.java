@@ -8,6 +8,8 @@ import i5.las2peer.api.security.UserAgent;
 import i5.las2peer.logging.L2pLogger;
 
 import java.io.Serializable;
+import java.util.Date;
+import java.util.Random;
 
 /**
  * L2pUtil
@@ -17,6 +19,23 @@ import java.io.Serializable;
 
 public abstract class L2pUtil {
 
+    private static char[] ALPHABET = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p',
+            'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z'};
+
+    /**
+     * Generate a random string of given length
+     *
+     * @param length Length that returned String is supposed to have
+     * @return Random string consisting of lower case letters
+     */
+    public static String randomString(int length) {
+        Random rand = new Random();
+        rand.setSeed(new Date().getTime());
+        StringBuilder strBuilder = new StringBuilder();
+        for (int i = 0; i < length; i++)
+            strBuilder.append(ALPHABET[rand.nextInt(ALPHABET.length)]);
+        return strBuilder.toString();
+    }
 
     /**
      * Retrieve a user's YouTube ID

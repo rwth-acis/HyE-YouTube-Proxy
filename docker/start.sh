@@ -67,13 +67,16 @@ if [ -n "$LAS2PEER_ETH_HOST" ]; then
     echo done.
 fi
 
-if [ -n "$CONTACT_STORER_NAME" ]; then
-    sed -i "s|contactstorer|${CONTACT_STORER_NAME}|" "${ETH_PROPS_DIR}${CONTACT_PROPS}"
+# Set defaults
+if [[ -z "$HYE_SERVICE_AGENT_NAME" ]]; then
+    HYE_SERVICE_AGENT_NAME="hyeAgent"
+fi
+if [[ -z "$HYE_SERVICE_AGENT_PW" ]]; then
+    HYE_SERVICE_AGENT_PW="changeme"
 fi
 
-if [ -n "$CONTACT_STORER_PW" ]; then
-    sed -i "s|supersecretpassword|${CONTACT_STORER_PW}|" "${ETH_PROPS_DIR}${CONTACT_PROPS}"
-fi
+sed -i "s|contactstorer|${HYE_SERVICE_AGENT_NAME}|" "${ETH_PROPS_DIR}${CONTACT_PROPS}"
+sed -i "s|supersecretpassword|${HYE_SERVICE_AGENT_PW}|" "${ETH_PROPS_DIR}${CONTACT_PROPS}"
 
 if [ -n "$CONSENT_REGISTRY_ADDRESS" ]; then
     sed -i "s|0xC58238a482e929584783d13A684f56Ca5249243E|${CONSENT_REGISTRY_ADDRESS}|" "${ETH_PROPS_DIR}${HYE_PROPS}"
@@ -100,11 +103,11 @@ if [ -n "$SERVICE_REGISTRY_ADDRESS" ]; then
 fi
 
 if [ -n "$WEBCONNECTOR_URL" ]; then
-    sed -i "s|http://localhost:8080/hye-youtube/|${WEBCONNECTOR_URL}|" "${ETH_PROPS_DIR}${HYE_PROPS}"
+    sed -i "s|http://localhost:8081/hye-youtube/|${WEBCONNECTOR_URL}|" "${ETH_PROPS_DIR}${HYE_PROPS}"
 fi
 
 if [ -n "$FRONTEND_URLS" ]; then
-    sed -i "s|frontendUrls =|frontendUrls = ${FRONTEND_URLS}|" "${ETH_PROPS_DIR}${HYE_PROPS}"
+    sed -i "s|frontendUrls = localhost:8081|frontendUrls = ${FRONTEND_URLS}|" "${ETH_PROPS_DIR}${HYE_PROPS}"
 fi
 
 if [ -z "$SLEEP_FOR" ]; then

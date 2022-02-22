@@ -54,7 +54,7 @@ import com.microsoft.playwright.Playwright;
 import com.microsoft.playwright.options.Cookie;
 // import com.microsoft.playwright.options.LoadState;
 
-/**
+/**`
  * HyE - YouTube Proxy
  *
  * This service is used to obtain user data from YouTube via scraping.
@@ -161,16 +161,33 @@ public class YouTubeProxy extends RESTService {
 	 * @return Handle of chosen user
 	 */
 	private String findMatch(ExecutionContext context, String request) {
-		// If user has preference, use this
-		JsonObject resp = getUserPreference(context);
-		if (resp.get("status").getAsInt() == 200 && resp.get("msg").getAsString() != "") {
-			return resp.get("msg").getAsString();
-		}
-
 		// Get users whose cookies we have access to
 		HashSet<String> candidates = idm.getPermissions(context);
-		String matchedUserId = "";
+		String readerId = L2pUtil.getUserId((UserAgent) context.getMainAgent());
+		
+		// If there are no other options, just return self
+		if (candidates == null || candidates.size() == 0)
+			return readerId;
 
+		// If user has preference in list of candidates, use this
+		JsonObject resp = getUserPreference(context);
+		if (resp.get("status").getAsInt() == 200) {
+			for (String userId : candidates) {
+				if (resp.get("msg").getAsString().equals(userId)) {
+					try {
+						// Add one time code to database
+						context.invoke(
+							"i5.las2peer.services.hyeYouTubeRecommendations.YouTubeRecommendations",
+							"insertOneTimeCode", new Serializable[] { request, 2.0, 0.0, 0.0 });
+					} catch (Exception e) {
+						log.printStackTrace(e);
+					}
+					return resp.get("msg").getAsString();
+				}
+			}
+		}
+
+		String matchedUserId = "";
 		try {
 			// RMI call with parameters
 			matchedUserId = (String) context.invoke(
@@ -184,7 +201,6 @@ public class YouTubeProxy extends RESTService {
 
 		// If recommendation service isn't running, try to get random user
 		// TODO repeat if chosen user did not consent to this particular request
-		String readerId = L2pUtil.getUserId((UserAgent) context.getMainAgent());
 		while (candidates != null && candidates.size() > 0) {
 			// Get random candidate
 			Iterator<String> it = candidates.iterator();
@@ -238,8 +254,9 @@ public class YouTubeProxy extends RESTService {
 		if (anon)
 			ownerId = findMatch(l2pContext, request);
 
-		ArrayList<Cookie> cookies = idm.getCookies(l2pContext, ownerId, request, anon);
-		HashMap<String, String> headers = idm.getHeaders(l2pContext, ownerId, request, anon);
+		// TODO replace ROOT_URI with actual requested resource
+		ArrayList<Cookie> cookies = idm.getCookies(l2pContext, ownerId, ROOT_URI, anon);
+		HashMap<String, String> headers = idm.getHeaders(l2pContext, ownerId, ROOT_URI, anon);
 
 		if (cookies == null) {
 			browserContext.close();
@@ -489,8 +506,10 @@ public class YouTubeProxy extends RESTService {
 		}
 
 		BrowserContext context = browser.newContext();
-		// TODO don't check for rootUri, but get requestUri from request data
-		response = setContext(l2pContext, context, ownerId, rootUri);
+		// Technically not what the request string was originally intended for, but useful for user study
+		String request = L2pUtil.randomString(20);
+		// TODO replace random String with requestUri from request data
+		response = setContext(l2pContext, context, ownerId, request);
 		if (!response.has("200"))
 			return buildResponse(Integer.parseInt((String) response.keySet().toArray()[0]), response.toString());
 		else
@@ -511,7 +530,11 @@ public class YouTubeProxy extends RESTService {
 			}
 			ArrayList<Recommendation> recommendations = YouTubeParser.mainPage(page.content());
 			context.close();
-			return buildResponse(200, ParserUtil.toJsonString(recommendations));
+			JsonArray responseBody = ParserUtil.toJsonArray(recommendations);
+			JsonObject oneTimeCode = new JsonObject();
+			oneTimeCode.addProperty("oneTimeCode", request);
+			responseBody.add(oneTimeCode);
+			return buildResponse(200, responseBody.toString());
 		} catch (Exception e) {
 			log.printStackTrace(e);
 			context.close();
@@ -556,8 +579,10 @@ public class YouTubeProxy extends RESTService {
 		}
 
 		BrowserContext context = browser.newContext();
-		// TODO don't check for rootUri, but get requestUri from request data
-		response = setContext(l2pContext, context, ownerId, rootUri);
+		// Technically not what the request string was originally intended for, but useful for user study
+		String request = L2pUtil.randomString(20);
+		// TODO replace random String with requestUri from request data
+		response = setContext(l2pContext, context, ownerId, request);
 		if (!response.has("200"))
 			return buildResponse(Integer.parseInt((String) response.keySet().toArray()[0]), response.toString());
 		else
@@ -578,7 +603,11 @@ public class YouTubeProxy extends RESTService {
 			}
 			ArrayList<Recommendation> recommendations = YouTubeParser.aside(page.content());
 			context.close();
-			return Response.ok().entity(ParserUtil.toJsonString(recommendations)).build();
+			JsonArray responseBody = ParserUtil.toJsonArray(recommendations);
+			JsonObject oneTimeCode = new JsonObject();
+			oneTimeCode.addProperty("oneTimeCode", request);
+			responseBody.add(oneTimeCode);
+			return buildResponse(200, responseBody.toString());
 		} catch (Exception e) {
 			log.printStackTrace(e);
 			context.close();
@@ -623,8 +652,10 @@ public class YouTubeProxy extends RESTService {
 		}
 
 		BrowserContext context = browser.newContext();
-		// TODO don't check for rootUri, but get requestUri from request data
-		response = setContext(l2pContext, context, ownerId, rootUri);
+		// Technically not what the request string was originally intended for, but useful for user study
+		String request = L2pUtil.randomString(20);
+		// TODO replace random String with requestUri from request data
+		response = setContext(l2pContext, context, ownerId, request);
 		if (!response.has("200"))
 			return buildResponse(Integer.parseInt((String) response.keySet().toArray()[0]), response.toString());
 		else
@@ -645,7 +676,11 @@ public class YouTubeProxy extends RESTService {
 			}
 			ArrayList<Recommendation> recommendations = YouTubeParser.resultsPage(page.content());
 			context.close();
-			return buildResponse(200, ParserUtil.toJsonString(recommendations));
+			JsonArray responseBody = ParserUtil.toJsonArray(recommendations);
+			JsonObject oneTimeCode = new JsonObject();
+			oneTimeCode.addProperty("oneTimeCode", request);
+			responseBody.add(oneTimeCode);
+			return buildResponse(200, responseBody.toString());
 		} catch (Exception e) {
 			log.printStackTrace(e);
 			context.close();
