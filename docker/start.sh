@@ -77,6 +77,9 @@ fi
 
 sed -i "s|contactstorer|${HYE_SERVICE_AGENT_NAME}|" "${ETH_PROPS_DIR}${CONTACT_PROPS}"
 sed -i "s|supersecretpassword|${HYE_SERVICE_AGENT_PW}|" "${ETH_PROPS_DIR}${CONTACT_PROPS}"
+sed -i "s|hyeAgent|${HYE_SERVICE_AGENT_NAME}|" "${ETH_PROPS_DIR}${HYE_PROPS}"
+sed -i "s|changeme|${HYE_SERVICE_AGENT_PW}|" "${ETH_PROPS_DIR}${HYE_PROPS}"
+
 
 if [ -n "$CONSENT_REGISTRY_ADDRESS" ]; then
     sed -i "s|0xC58238a482e929584783d13A684f56Ca5249243E|${CONSENT_REGISTRY_ADDRESS}|" "${ETH_PROPS_DIR}${HYE_PROPS}"
