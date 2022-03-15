@@ -339,15 +339,16 @@ public class YouTubeProxy extends RESTService {
 			}
 			requestBuilder.setHeader("Cookie", cookieString);
 			HttpResponse<String> response = client.send(requestBuilder.build(), HttpResponse.BodyHandlers.ofString());
-			if (response.statusCode() >= 300 && response.statusCode() != 304) {
-				// 30x means the user is presented with login screen, thus not logged in currently
-				responseObj.addProperty("status", 400);
-				responseObj.addProperty("msg", "Cookie validation failed.");
-				return responseObj;
-			} else if (response.statusCode() >= 400) {
+			if (response.statusCode() >= 400) {
 				// 4xx/5xx is bad, but not necessarily the cookies fault
 				responseObj.addProperty("status", 500);
 				responseObj.addProperty("msg", "Could not validate cookies.");
+				return responseObj;
+			}
+			else if (response.statusCode() >= 300 && response.statusCode() != 304) {
+				// 30x means the user is presented with login screen, thus not logged in currently
+				responseObj.addProperty("status", 400);
+				responseObj.addProperty("msg", "Cookie validation failed.");
 				return responseObj;
 			}
 		} catch (Exception e) {

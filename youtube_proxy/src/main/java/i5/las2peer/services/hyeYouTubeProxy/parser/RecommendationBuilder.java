@@ -178,7 +178,7 @@ public abstract class RecommendationBuilder {
      * @param metaBlock Specific HTML div element related to given video containing upload date and view information
      * @return YouTube Recommendation object with relevant video data
      */
-    public static Recommendation build(Elements links, Elements imgs, Elements metaBlock) {
+    public static Recommendation build(Elements imgs, Elements links, Elements metaBlock) {
         Recommendation rec;
         if (metaBlock.size() < 1) {
             log.info("Not enough meta elements to build Recommendation (" + metaBlock.size() + "/1)");
@@ -219,7 +219,7 @@ public abstract class RecommendationBuilder {
      * @param imgs HTML image elements (img) related to the given video
      * @return YouTube Recommendation object with relevant video data
      */
-    public static Recommendation build(Elements links, Elements imgs) {
+    public static Recommendation build(Elements imgs, Elements links) {
         Recommendation rec;
         if (imgs.size() < 2) {
             log.info("Not enough image elements to build Recommendation (" + imgs.size() + "/2)");

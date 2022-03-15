@@ -94,7 +94,7 @@ public abstract class YouTubeParser {
             JsonObject recObj = it.next().getAsJsonObject();
             Recommendation rec = RecommendationBuilder.build(recObj);
             if (rec == null)
-                log.info("Error creating recommendation object from JSON data");
+                log.warning("Error creating recommendation object from JSON data");
             else
                 recs.add(rec);
         }
@@ -114,7 +114,7 @@ public abstract class YouTubeParser {
 
         JsonObject mainObj = getMainObject(html, mainObjKey);
         if (mainObj == null) {
-            log.info("Unable to find " + mainObjKey + " in given HTML");
+            log.severe("Unable to find " + mainObjKey + " in given HTML");
             return recs;
         }
 
@@ -147,15 +147,19 @@ public abstract class YouTubeParser {
 
         JsonObject mainObj = getMainObject(html, mainObjKey);
         if (mainObj == null) {
-            log.info("Unable to find " + mainObjKey + " in given HTML");
+            log.severe("Unable to find " + mainObjKey + " in given HTML");
             return recs;
         }
 
         JsonArray contents;
         try {
-            contents = mainObj.get("secondaryResults").getAsJsonObject().get("secondaryResults").getAsJsonObject()
-                    .get("results").getAsJsonArray();
-
+            contents = mainObj.get("secondaryResults").getAsJsonObject()
+                    .get("secondaryResults").getAsJsonObject().get("results")
+                    .getAsJsonArray();
+            // Sometimes there is some junk object before the recommendation data
+            if (contents.get(0).getAsJsonObject().has("relatedChipCloudRenderer"))
+                contents = contents.get(1).getAsJsonObject().get("itemSectionRenderer")
+                        .getAsJsonObject().get("contents").getAsJsonArray();
         } catch (Exception e) {
             log.printStackTrace(e);
             return recs;
@@ -179,7 +183,7 @@ public abstract class YouTubeParser {
 
         JsonObject mainObj = getMainObject(html, mainObjKey);
         if (mainObj == null) {
-            log.info("Unable to find " + mainObjKey + " in given HTML");
+            log.severe("Unable to find " + mainObjKey + " in given HTML");
             return recs;
         }
 
@@ -219,7 +223,7 @@ public abstract class YouTubeParser {
 
             Recommendation rec = RecommendationBuilder.build(imgs, links, metaBlock);
             if (rec == null)
-                log.info("Error creating recommendation object from HTML data");
+                log.warning("Error creating recommendation object from HTML data");
             else
                 recs.add(rec);
         }
@@ -250,7 +254,7 @@ public abstract class YouTubeParser {
 
             Recommendation rec = RecommendationBuilder.build(imgs, links);
             if (rec == null)
-                log.info("Error creating recommendation object from HTML data");
+                log.warning("Error creating recommendation object from HTML data");
             else
                 recs.add(rec);
         }
@@ -283,7 +287,7 @@ public abstract class YouTubeParser {
        
             Recommendation rec = RecommendationBuilder.build(imgs, links, metaBlock);
             if (rec == null)
-                log.info("Error creating recommendation object from HTML data");
+                log.warning("Error creating recommendation object from HTML data");
             else
                 recs.add(rec);
         }

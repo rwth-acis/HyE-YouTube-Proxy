@@ -85,29 +85,6 @@ COPY --chown=build:build ./keystore /app/keystore
 COPY --chown=build:build ./start.sh /app/start.sh
 RUN chmod +x /app/start.sh
 
-RUN echo "Building Contact service..."
-RUN git clone https://github.com/rwth-acis/las2peer-contact-service.git
-WORKDIR /app/las2peer-contact-service
-RUN export JAVA_HOME=/opt/jdk17 && export PATH=$PATH:$JAVA_HOME/bin && ./gradlew --version && ./gradlew jar
-RUN cp contact_service/export/jars/* /app/las2peer/service
-
-RUN echo "Building File service..."
-WORKDIR /app
-RUN git clone https://github.com/rwth-acis/las2peer-FileService.git
-WORKDIR /app/las2peer-FileService
-RUN git checkout gradle-7.2
-RUN export JAVA_HOME=/opt/jdk17 && export PATH=$PATH:$JAVA_HOME/bin && ./gradlew --version && ./gradlew jar
-RUN cp file_service/build/libs/* /app/las2peer/service
-
-RUN echo "Building Userinformation service..."
-WORKDIR /app
-RUN git clone https://github.com/rwth-acis/las2peer-user-information-service.git
-WORKDIR /app/las2peer-user-information-service
-RUN git checkout java17
-RUN chmod +x gradlew
-RUN export JAVA_HOME=/opt/jdk17 && export PATH=$PATH:$JAVA_HOME/bin && ./gradlew --version && ./gradlew jar
-RUN cp user-info-service/export/jars/* /app/las2peer/service
-
 RUN echo "Building HyE - YouTubeProxy service..."
 WORKDIR /app
 RUN git clone https://github.com/rwth-acis/HyE-YouTube-Proxy.git
