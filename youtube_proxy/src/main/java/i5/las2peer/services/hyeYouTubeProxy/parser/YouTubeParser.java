@@ -210,29 +210,30 @@ public abstract class YouTubeParser {
      * @return Personalized YouTube recommendations
      */
     public static ArrayList<Recommendation> mainPage(String html) {
-        ArrayList<Recommendation> recs = new ArrayList<Recommendation>();
-        Document doc = Jsoup.parse(html);
-        Element body = doc.body();
-        Elements thumbnails = body.getElementsByTag(THUMBNAIL_TAG);
-        Iterator<Element> it = thumbnails.iterator();
-        while (it.hasNext()) {
-            Element recommendation = it.next().parent();
-            Elements imgs = recommendation.getElementsByTag(IMAGE_TAG);
-            Elements links = recommendation.getElementsByTag(LINK_TAG);
-            Elements metaBlock = recommendation.getElementsByClass(METADATA_CLASS);
-
-            Recommendation rec = RecommendationBuilder.build(imgs, links, metaBlock);
-            if (rec == null)
-                log.warning("Error creating recommendation object from HTML data");
-            else
-                recs.add(rec);
-        }
-
+          // The proper scraping is unfortunately a bit too inconsistent
+//        ArrayList<Recommendation> recs = new ArrayList<Recommendation>();
+//        Document doc = Jsoup.parse(html);
+//        Element body = doc.body();
+//        Elements thumbnails = body.getElementsByTag(THUMBNAIL_TAG);
+//        Iterator<Element> it = thumbnails.iterator();
+//        while (it.hasNext()) {
+//            Element recommendation = it.next().parent();
+//            Elements imgs = recommendation.getElementsByTag(IMAGE_TAG);
+//            Elements links = recommendation.getElementsByTag(LINK_TAG);
+//            Elements metaBlock = recommendation.getElementsByClass(METADATA_CLASS);
+//
+//            Recommendation rec = RecommendationBuilder.build(imgs, links, metaBlock);
+//            if (rec == null)
+//                log.warning("Error creating recommendation object from HTML data");
+//            else
+//                recs.add(rec);
+//        }
+//
         // If no recommendations were found, try another way
-        if (recs.isEmpty())
+//        if (recs.isEmpty())
             return getRecsFromMainJS(html);
-        else
-            return recs;
+//        else
+//            return recs;
     }
 
     /**
