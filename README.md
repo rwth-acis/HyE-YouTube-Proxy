@@ -1,6 +1,6 @@
 # HyE - YouTube Proxy
 This repository contains the code for a [las2peer](https://github.com/rwth-acis/las2peer/) service called *hyeYouTubeProxy* with the main class *YouTubeProxy* running under the service path `/hye-youtube`.
-Although this service is specifically designed to work with YouTube and YouTube video data, it may be used as a template to provide its functionality for a different service.
+Although this service is specifically designed to work with YouTube and YouTube video data, it may be used as a template to provide its functionality for a different platform.
 The underlying purpose of this service is to provide the functionality of uploading and (more or less) securely sharing YouTube cookies in order to obtain personalized YouTube content, specifically video recommendations and search results.
 In order to do so, the following routes are implemented.
 
@@ -10,7 +10,7 @@ The following three routes respond to GET requests by returning personalized You
 
 * Main Page (`/`): returns the video recommendations displayed on another user's YouTube main page.
 * Video Page (`/watch?v=<VIDEO_ID>`): returns the video recommendations displayed in the sidebar to another user if they were to watch the video referenced by the given YouTube video ID.
-* Search Page (`/results?search_query=<SEARCH_TERMS>`): returns the personalized search results for another user returned by YouTube based on the given search terms.
+* Search Page (`/results?search_query=<SEARCH_QUERY>`): returns the personalized search results for another user returned by YouTube based on the given search query.
 
 #### Parsing YouTube data
 In order to retrieve this personalized data off of YouTube, the service relies on the browser automation framework [Microsoft Playwright](https://github.com/microsoft/playwright-java).
@@ -19,15 +19,15 @@ Once the page is loaded, the HTML code is parsed using [jsoup](https://jsoup.org
 
 ### YouTube Cookies
 The cookies used for these requests are uploaded via a POST request to the `/cookies` endpoint and stored inside the [shared las2peer storage](https://github.com/rwth-acis/las2peer/wiki/Shared-Storage#las2peer-shared-storage) after getting encrypted with the owner's private key.
-Using a GET request, the requesting user's cookies can be retrieved, and using a DELETE request, they can be deleted.
+The GET request is used to check whether the requesting user has uploaded a valid set of cookies, and using a DELETE request, they can be deleted.
 
 ### Access control
 las2peer provides the possibility of adding additional readers who may access data stored in the shared las2peer storage, which is how these cookies are shared among different users.
 To do so, a list of las2peer User Agent IDs is sent as a POST request to the `/reader` endpoint, which can also be deleted again via a DELETE request.
-Using a GET request, the User Agent IDs of all the users who shared their cookies *non-anonymously* with the requesting users are returned i.e., of all the users whose cookies the requesting user may specifically use.
+Using a GET request, the User Agent IDs of all the users who shared their cookies *non-anonymously* with the requesting users are returned i.e., of all the users whose cookies the requesting user may use explicitly.
 
 #### Anonymous and non-anonymous requests
-The HyE service differentiates between anonymous requests where the cookie used to obtain personalized YouTube data is chosen by the service itself (or an external service, such as [HyE - YouTube Recommendations](github.com/rwth-acis/hye-youtube-recommendations)) so that the requesting user is not aware of the identity of the cookie owner, and non-anonymous requests where the requesting user determines whose cookies are used.
+The HyE service differentiates between anonymous requests where the cookie used to obtain personalized YouTube data is chosen by the service itself (or an external service, such as [HyE - YouTube Recommendations](https://github.com/rwth-acis/hye-youtube-recommendations/)) so that the requesting user is not aware of the identity of the cookie owner, and non-anonymous requests where the requesting user determines whose cookies are used.
 Since YouTube recommendations constitute private information, linking these to a user (even if the real world identity might not be known) constitutes a higher privacy risk and thus, the permission for non-anonymous requests has to be granted specifically.
 
 #### Request URI
@@ -46,8 +46,9 @@ And via DELETE requests, this consent can be revoked.
 
 ## Deployment
 This service requires Gradle 7.2 and Java 17.
-In order to build a JAR, which can then be uploaded via the las2peer web frontend, clone this repository and run `gradle build jar`.
-Once uploaded and started, the route `/init` has to be called via a GET request in order to initialize a couple of vital components without which the service cannot function.
+In order to build a JAR, which can then be started on a las2peer node, clone this repository and run `gradle build jar`.
+Before starting the service, a dedicated service agent should be created, which is then used by the service to store and manage data.
+Once started, the route `/init` has to be called via a GET request in order to initialize a couple of vital components without which the service cannot function.
 
 ### Ethereum connection
 As explained above, the service requires a connection to an Ethereum blockchain to function.
@@ -65,6 +66,8 @@ Below, a table with the configuration options and their purpose is provided.
 | ---- | ----- | -------- | ----------- |
 | `consentRegistryAddress` | Hex address | No | The location the Consent Registry Smart Contract was deployed to on the Ethereum blockchain |
 | `rootUri` | Web URI | No | The root address under which the service is deployed |
+| `serviceAgentName` | String | No | Name of an existing las2peer agent used by the service to store data |
+| `serviceAgentPw` | String | No | Password of las2peer service agent |
 | `debug` | Boolean | Yes | If set, additional logging output is provided and cookies and headers may be loaded from local files |
 | `cookieFile` | Local file path | Yes | If set, the cookies used for requests sent to YouTube will be read from the provided file instead of the las2peer storage (debug has to be set to `true` in order to use this option)|
 | `headerFile` | Local file path | Yes | If set, the headers used for requests sent to YouTube will be read from the provided file instead of the las2peer storage (debug has to be set to `true` in order to use this option)|

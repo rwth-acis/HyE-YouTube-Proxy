@@ -18,7 +18,7 @@ CONFIG_ENDPOINT_WAIT=${CONFIG_ENDPOINT_WAIT:-21600}
 
 NODE_ID_SEED=${NODE_ID_SEED:-$RANDOM}
 
-ETH_PROPS_DIR=/app/las2peer/etc/
+ETH_PROPS_DIR=/app/HyE-YouTube-Proxy/etc/
 ETH_PROPS=i5.las2peer.registry.data.RegistryConfiguration.properties
 CONTACT_PROPS=i5.las2peer.services.contactService.ContactService.properties
 HYE_PROPS=i5.las2peer.services.hyeYouTubeProxy.YouTubeProxy.properties
@@ -42,7 +42,7 @@ function truffleMigrate {
     # yeah, this isn't fun:
     # addresses should already be in properties file
     # cat migration.log | grep -A5 "\(Deploying\|Replacing\|contract address\) \'\(CommunityTagIndex\|UserRegistry\|ServiceRegistry\|GroupRegistry\|ReputationRegistry\)\'" | grep '\(Deploying\|Replacing\|contract address\)' | tr -d " '>:" | sed -e '$!N;s/\n//;s/Deploying//;s/Replacing//;s/contractaddress/Address = /;s/./\l&/' >> "${ETH_PROPS_DIR}${ETH_PROPS}"
-    cp migration.log /app/las2peer/node-storage/migration.log
+    cp migration.log /app/HyE-YouTube-Proxy/node-storage/migration.log
     echo done.
  }
 
@@ -75,11 +75,12 @@ if [[ -z "$HYE_SERVICE_AGENT_PW" ]]; then
     HYE_SERVICE_AGENT_PW="changeme"
 fi
 
+echo "service-agent-user.xml;${HYE_SERVICE_AGENT_PW}" > etc/startup/passphrases.txt
+
 sed -i "s|contactstorer|${HYE_SERVICE_AGENT_NAME}|" "${ETH_PROPS_DIR}${CONTACT_PROPS}"
 sed -i "s|supersecretpassword|${HYE_SERVICE_AGENT_PW}|" "${ETH_PROPS_DIR}${CONTACT_PROPS}"
 sed -i "s|hyeAgent|${HYE_SERVICE_AGENT_NAME}|" "${ETH_PROPS_DIR}${HYE_PROPS}"
 sed -i "s|changeme|${HYE_SERVICE_AGENT_PW}|" "${ETH_PROPS_DIR}${HYE_PROPS}"
-
 
 if [ -n "$CONSENT_REGISTRY_ADDRESS" ]; then
     sed -i "s|0xC58238a482e929584783d13A684f56Ca5249243E|${CONSENT_REGISTRY_ADDRESS}|" "${ETH_PROPS_DIR}${HYE_PROPS}"
@@ -117,11 +118,11 @@ if [ -z "$SLEEP_FOR" ]; then
     SLEEP_FOR=30
 fi
 
-if [ -s "/app/las2peer/node-storage/migration.log" ]; then
+if [ -s "/app/HyE-YouTube-Proxy/node-storage/migration.log" ]; then
     echo Found old migration.log, importing...
-    cat /app/las2peer/node-storage/migration.log
+    cat /app/HyE-YouTube-Proxy/node-storage/migration.log
 
-    cat /app/las2peer/node-storage/migration.log | grep -A5 "\(Deploying\|Replacing\|contract address\) \'\(CommunityTagIndex\|UserRegistry\|ServiceRegistry\|GroupRegistry\|ReputationRegistry\)\'" | grep '\(Deploying\|Replacing\|contract address\)' | tr -d " '>:" | sed -e '$!N;s/\n//;s/Deploying//;s/Replacing//;s/contractaddress/Address = /;s/./\l&/' >> "${ETH_PROPS_DIR}${ETH_PROPS}"
+    cat /app/HyE-YouTube-Proxy/node-storage/migration.log | grep -A5 "\(Deploying\|Replacing\|contract address\) \'\(CommunityTagIndex\|UserRegistry\|ServiceRegistry\|GroupRegistry\|ReputationRegistry\)\'" | grep '\(Deploying\|Replacing\|contract address\)' | tr -d " '>:" | sed -e '$!N;s/\n//;s/Deploying//;s/Replacing//;s/contractaddress/Address = /;s/./\l&/' >> "${ETH_PROPS_DIR}${ETH_PROPS}"
 
     echo done.
 fi
@@ -133,7 +134,7 @@ else
         # echo Waiting for Ethereum client at $(host $LAS2PEER_ETH_HOST):$(port $LAS2PEER_ETH_HOST)...
         # if waitForEndpoint $(host $LAS2PEER_ETH_HOST) $(port $LAS2PEER_ETH_HOST) 300; then
             # echo Found Eth client.
-        if [ -s "/app/las2peer/node-storage/migration.log" ]; then
+        if [ -s "/app/HyE-YouTube-Proxy/node-storage/migration.log" ]; then
             echo Migrated from logs.
         else
             # wait for seems broken somehow
@@ -148,10 +149,9 @@ fi
 
 echo Serving config files at :8001 ...
 echo -e "\a" # ding
-cd /app/las2peer/
+cd /app/HyE-YouTube-Proxy/
 pm2 start --silent http-server -- ./etc -p 8001
 
-cd /app/las2peer
 if [ -n "$LAS2PEER_BOOTSTRAP" ]; then
     if waitForEndpoint $(host ${LAS2PEER_BOOTSTRAP}) $(port ${LAS2PEER_BOOTSTRAP}) 600; then
         echo Las2peer bootstrap available, continuing.
@@ -160,6 +160,8 @@ if [ -n "$LAS2PEER_BOOTSTRAP" ]; then
         exit 3
     fi
 fi
+
+java -cp "lib/*" i5.las2peer.tools.UserAgentGenerator ${HYE_SERVICE_AGENT_PW} ${HYE_SERVICE_AGENT_NAME} fake@emial.com > etc/startup/service-agent-user.xml
 
 # it's realistic for different nodes to use different accounts (i.e., to have
 # different node operators). this function echos the N-th mnemonic if the
@@ -187,6 +189,7 @@ if [ -n "$LAS2PEER_ETH_HOST" ]; then
         $([ -n "$LAS2PEER_BOOTSTRAP" ] && echo "--bootstrap $LAS2PEER_BOOTSTRAP") \
         --node-id-seed $NODE_ID_SEED \
         --ethereum-mnemonic "$(selectMnemonic)" \
+        uploadStartupDirectory \
         $(echo $ADDITIONAL_LAUNCHER_ARGS) \
         startWebConnector \
         "node=getNodeAsEthereumNode()" "registry=node.getRegistryClient()" "n=getNodeAsEthereumNode()" "r=n.getRegistryClient()" \
@@ -200,6 +203,7 @@ else
         --port $LAS2PEER_PORT \
         $([ -n "$LAS2PEER_BOOTSTRAP" ] && echo "--bootstrap $LAS2PEER_BOOTSTRAP") \
         --node-id-seed $NODE_ID_SEED \
+        uploadStartupDirectory \
         $(echo $ADDITIONAL_LAUNCHER_ARGS) \
         startWebConnector \
         $(echo $ADDITIONAL_PROMPT_CMDS) \

@@ -302,7 +302,7 @@ public class IdentityManager {
      * @param context The current execution context required to fetch the cookies accessible to the current user
      * @param ownerId The las2peer ID of the user whose cookies are requested
      * @param reqUri The request URI for which the cookies are requested
-     * @oaram anon Whether the identity of the cookies' owner is known to the requesting user
+     * @param anon Whether the identity of the cookies' owner is known to the requesting user
      * @return Valid YouTube cookies stored for the requested user if requesting user has required permissions
      */
     public ArrayList<Cookie> getCookies(ExecutionContext context, String ownerId, String reqUri, boolean anon) {
@@ -489,7 +489,7 @@ public class IdentityManager {
      * @param context The current execution context required to fetch the cookies accessible to the current user
      * @param ownerId The las2peer ID of the user whose cookies are requested
      * @param reqUri The request URI for which the cookies are requested
-     * @oaram anon Whether the identity of the cookies' owner is known to the requesting user
+     * @param anon Whether the identity of the cookies' owner is known to the requesting user
      * @return Valid HTTP headers stored for that user
      */
     public HashMap<String, String> getHeaders(ExecutionContext context, String ownerId, String reqUri, boolean anon) {
