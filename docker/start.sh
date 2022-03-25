@@ -161,7 +161,7 @@ if [ -n "$LAS2PEER_BOOTSTRAP" ]; then
     fi
 fi
 
-java -cp "lib/*" i5.las2peer.tools.UserAgentGenerator ${HYE_SERVICE_AGENT_PW} ${HYE_SERVICE_AGENT_NAME} fake@emial.com > etc/startup/service-agent-user.xml
+${JAVA_HOME}/bin/java -cp "lib/*" i5.las2peer.tools.UserAgentGenerator ${HYE_SERVICE_AGENT_PW} ${HYE_SERVICE_AGENT_NAME} fake@emial.com > etc/startup/service-agent-user.xml
 
 # it's realistic for different nodes to use different accounts (i.e., to have
 # different node operators). this function echos the N-th mnemonic if the
@@ -183,7 +183,7 @@ echo external_address = $(curl -s https://ipinfo.io/ip):${LAS2PEER_PORT} > etc/p
 echo Starting las2peer node ...
 if [ -n "$LAS2PEER_ETH_HOST" ]; then
     echo ... using ethereum boot procedure:
-    ${JAVA_HOME}/bin/java $([ -n "$ADDITIONAL_JAVA_ARGS" ] && echo $ADDITIONAL_JAVA_ARGS) -cp "core/src/main/resources/:core/export/jars/*:restmapper/export/jars/*:webconnector/export/jars/*:core/lib/*:restmapper/lib/*:webconnector/lib/*" --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.util=ALL-UNNAMED i5.las2peer.tools.L2pNodeLauncher \
+    ${JAVA_HOME}/bin/java $([ -n "$ADDITIONAL_JAVA_ARGS" ] && echo $ADDITIONAL_JAVA_ARGS) -cp "lib/*" --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.util=ALL-UNNAMED i5.las2peer.tools.L2pNodeLauncher \
         --service-directory service \
         --port $LAS2PEER_PORT \
         $([ -n "$LAS2PEER_BOOTSTRAP" ] && echo "--bootstrap $LAS2PEER_BOOTSTRAP") \
@@ -198,7 +198,7 @@ if [ -n "$LAS2PEER_ETH_HOST" ]; then
 else
     echo ... using non-ethereum boot procedure:
     ${JAVA_HOME}/bin/java $(echo $ADDITIONAL_JAVA_ARGS) \
-        -cp "core/src/main/resources/:core/export/jars/*:restmapper/export/jars/*:webconnector/export/jars/*:core/lib/*:restmapper/lib/*:webconnector/lib/*" --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.util=ALL-UNNAMED i5.las2peer.tools.L2pNodeLauncher \
+        -cp "lib/*" --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.util=ALL-UNNAMED i5.las2peer.tools.L2pNodeLauncher \
         --service-directory service \
         --port $LAS2PEER_PORT \
         $([ -n "$LAS2PEER_BOOTSTRAP" ] && echo "--bootstrap $LAS2PEER_BOOTSTRAP") \

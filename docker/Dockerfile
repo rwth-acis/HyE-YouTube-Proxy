@@ -47,6 +47,7 @@ RUN export JAVA_HOME=/opt/jdk17 && export PATH=$PATH:$JAVA_HOME/bin && export GR
 RUN cp youtube_proxy/export/jars/* lib/
 COPY --chown=las2peer:las2peer . /app/HyE-YouTube-Proxy/
 RUN mkdir -p node-storage
+RUN mkdir -p etc/startup
 
 # Unfortunately, playwright seems to require root privileges... That should be fixed, but who's got the time
 USER root
