@@ -210,7 +210,7 @@ public class YouTubeProxy extends RESTService {
 				--randPos;
 			}
 			// Check for permission
-			if (idm.checkConsent(new Consent(matchedUserId, readerId, rootUri, true))) {
+			if (idm.checkConsent(context, new Consent(matchedUserId, readerId, rootUri, true))) {
 				break;
 			} else {
 				// Go again
@@ -1008,7 +1008,7 @@ public class YouTubeProxy extends RESTService {
 			while (it.hasNext()) {
 				String ownerId = it.next();
 				Consent consentObj = new Consent(ownerId, readerId, rootUri, false);
-				if (idm.checkConsent(consentObj)) {
+				if (idm.checkConsent(context, consentObj)) {
 					ownerIds.add(ownerId);
 				}
 			}

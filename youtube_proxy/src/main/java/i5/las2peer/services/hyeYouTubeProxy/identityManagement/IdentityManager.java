@@ -3,11 +3,16 @@ package i5.las2peer.services.hyeYouTubeProxy.identityManagement;
 import i5.las2peer.api.Context;
 import i5.las2peer.api.persistency.EnvelopeNotFoundException;
 import i5.las2peer.api.security.Agent;
+import i5.las2peer.api.security.PassphraseAgent;
 import i5.las2peer.api.security.ServiceAgent;
 import i5.las2peer.execution.ExecutionContext;
 import i5.las2peer.api.persistency.Envelope;
 import i5.las2peer.p2p.EthereumNode;
+import i5.las2peer.security.AgentImpl;
+import i5.las2peer.security.MessageHandler;
 import i5.las2peer.security.ServiceAgentImpl;
+import i5.las2peer.security.UserAgentImpl;
+import i5.las2peer.serialization.SerializeTools;
 import i5.las2peer.services.hyeYouTubeProxy.YouTubeProxy;
 import i5.las2peer.logging.L2pLogger;
 import i5.las2peer.api.security.UserAgent;
@@ -22,10 +27,15 @@ import com.google.gson.JsonParser;
 import com.microsoft.playwright.options.Cookie;
 import i5.las2peer.services.hyeYouTubeProxy.lib.L2pUtil;
 import i5.las2peer.services.hyeYouTubeProxy.lib.ParserUtil;
+import i5.las2peer.tools.CryptoTools;
 
+import javax.crypto.SecretKey;
 import java.io.File;
 import java.io.FileReader;
 import java.io.Serializable;
+import java.nio.charset.StandardCharsets;
+import java.security.KeyPair;
+import java.security.PublicKey;
 import java.util.*;
 
 /**
@@ -45,6 +55,8 @@ public class IdentityManager {
     private ConsentRegistry consentRegistry;
     private String serviceAgentName;
     private String serviceAgentPw;
+    private SecretKey secretKey;
+    private KeyPair signKey;
 
     private final String COOKIE_SUFFIX = "_cookies";
     private final String HEADER_SUFFIX = "_headers";
@@ -288,6 +300,8 @@ public class IdentityManager {
             }
             this.serviceAgentName = serviceAgentName;
             this.serviceAgentPw = serviceAgentPw;
+            this.secretKey = CryptoTools.generateSymmetricKey();
+            this.signKey = CryptoTools.generateKeyPair();
         } catch (Exception e) {
             log.warning("Initialization failed!");
             log.printStackTrace(e);
@@ -297,7 +311,95 @@ public class IdentityManager {
     }
 
     /**
-     * Retrieve cookies for the given user
+     * Helper function to retrieve cookies for the given user from las2peer storage
+     *
+     * @param context The current execution context required to fetch the cookies accessible to the current user
+     * @param ownerId The las2peer ID of the user whose cookies are requested
+     * @param reqUri The request URI for which the cookies are requested
+     * @param anon Whether the identity of the cookies' owner is known to the requesting user
+     * @return Valid YouTube cookies stored for the requested user if requesting user has required permissions as String
+     */
+    private String getCookiesFromStorage(ExecutionContext context, String ownerId, String reqUri, boolean anon) {
+        try {
+            String userId = L2pUtil.getUserId((UserAgent) context.getMainAgent());
+            // Check whether user is allowed to access the owner's cookies
+            Envelope cookieEnvelope = context.requestEnvelope(getCookieHandle(ownerId));
+
+            // Make sure that user has the proper permissions to use the cookie for the specified request
+            if (ownerId.equals(userId) || checkConsent(context, new Consent(ownerId, userId, reqUri, anon))) {
+                // Decrypt cookie (sometimes stuff gets added to encrypted cookies, so use head and tail markings)
+                int head = 0, tail = 0, statusH = 0, statusT = 0, count = 0;
+                byte[] content = SerializeTools.serialize(SerializeTools.deserializeBase64(cookieEnvelope.getContent()
+                        .toString()));
+                for (byte b : content) {
+                    count++;
+                    if ((int) b == -1)
+                        statusH++;
+                    else
+                        statusH = 0;
+                    if (head == 0 && statusH >= 5)
+                        head = count;
+                    if ((int) b == 1)
+                        statusT++;
+                    else
+                        statusT = 0;
+                    if (tail == 0 && statusT >= 5)
+                        tail = count - statusT;
+                }
+                byte[] enc = new byte[tail-head];
+                count = 0;
+                for (int i = head; i < tail; i++)
+                    enc[count++] = content[i];
+                String dec = new String(CryptoTools.decryptSymmetric(enc, secretKey));
+                // Remove padding
+                head = 0;
+                tail = 0;
+                statusH = 0;
+                count = 0;
+                for (int i = 0; i < dec.length(); i++) {
+                    if (statusH < 3 && dec.charAt(i) == '[') {
+                        statusH = 1;
+                        head = i;
+                        continue;
+                    }
+                    if (statusH == 1) {
+                        if (dec.charAt(i) == '{')
+                            statusH = 2;
+                        else
+                            statusH = 0;
+                        continue;
+                    }
+                    if (statusH == 2) {
+                        if (dec.charAt(i) == '"') {
+                            statusH = 3;
+                            count = 1;
+                        }
+                        else
+                            statusH = 0;
+                        continue;
+                    }
+                    if (statusH == 3) {
+                        if (dec.charAt(i) == '[')
+                            count++;
+                        if (dec.charAt(i) == ']')
+                            count--;
+                        if (count == 0)
+                            tail = i;
+                    }
+                }
+                dec = dec.substring(head, tail+1);
+                System.out.println(dec);
+                return dec;
+            }
+            return "";
+        } catch (Exception e) {
+            log.printStackTrace(e);
+            return null;
+        }
+    }
+
+    /**
+     * Retrieve cookies for the given user as Array List
      *
      * @param context The current execution context required to fetch the cookies accessible to the current user
      * @param ownerId The las2peer ID of the user whose cookies are requested
@@ -313,20 +415,30 @@ public class IdentityManager {
         }
 
         // Else retrieve cookies from las2peer storage
-        try {
-            String userId = L2pUtil.getUserId((UserAgent) context.getMainAgent());
-            // Check whether user is allowed to access the owner's cookies
-            Envelope cookieEnvelope = context.requestEnvelope(getCookieHandle(ownerId));
-
-            // Make sure that user has the proper permissions to use the cookie for the specified request
-            if (ownerId.equals(userId) || checkConsent(new Consent(ownerId, userId, reqUri, anon)))
-                return JsonStringToCookieArray(cookieEnvelope.getContent().toString());
-
-            return new ArrayList<Cookie>();
-        } catch (Exception e) {
-            log.printStackTrace(e);
+        String cookieString = getCookiesFromStorage(context, ownerId, reqUri, anon);
+        if (cookieString == null)
             return null;
-        }
+        if (cookieString.length() < 1)
+            return new ArrayList<Cookie>();
+        return JsonStringToCookieArray(cookieString);
+    }
+
+    /**
+     * Retrieve cookies for the given user as Json Array
+     *
+     * @param context The current execution context required to fetch the cookies accessible to the current user
+     * @param ownerId The las2peer ID of the user whose cookies are requested
+     * @param reqUri The request URI for which the cookies are requested
+     * @param anon Whether the identity of the cookies' owner is known to the requesting user
+     * @return Valid YouTube cookies stored for the requested user if requesting user has required permissions
+     */
+    public JsonArray getCookiesAsJson(ExecutionContext context, String ownerId, String reqUri, boolean anon) {
+        String cookieString = getCookiesFromStorage(context, ownerId, reqUri, anon);
+        if (cookieString == null)
+            return null;
+        if (cookieString.length() < 1)
+            return new JsonArray();
+        return ParserUtil.toJsonArray(cookieString);
     }
 
     /**
@@ -338,24 +450,6 @@ public class IdentityManager {
      */
     private ArrayList<Cookie> getCookies(ExecutionContext context, String ownerId) {
         return getCookies(context, ownerId, YouTubeProxy.ROOT_URI, true);
-    }
-
-    public JsonArray getCookiesAsJson(ExecutionContext context, String ownerId, String reqUri, boolean anon) {
-        try {
-            String userId = L2pUtil.getUserId((UserAgent) context.getMainAgent());
-            // Check whether user is allowed to access the owner's cookies
-            Envelope cookieEnvelope = context.requestEnvelope(getCookieHandle(ownerId));
-
-            // Make sure that user has the proper permissions to use the cookie for the specified request
-            if (ownerId.equals(userId) || checkConsent(new Consent(ownerId, userId, reqUri, anon))) {
-                return ParserUtil.toJsonArray(cookieEnvelope.getContent().toString());
-            }
-
-            return new JsonArray();
-        } catch (Exception e) {
-            log.printStackTrace(e);
-            return null;
-        }
     }
 
     /**
@@ -387,7 +481,20 @@ public class IdentityManager {
             String cookieData = parsedCookies.toString();
             responseMsg += cookieData + "}";
 
-            if (!L2pUtil.storeEnvelope(context, cookieHandle, cookieData, null, log))
+            // Encrypt with key passed in properties file
+            byte[] enc = CryptoTools.encryptSymmetric(cookieData, this.secretKey);
+            System.out.println(enc.length);
+            // Sometimes stuff gets added to encrypted cookies, so mark head and tail
+            byte[] content = new byte[enc.length+10];
+            for (int i = 0; i < content.length; i++) {
+                if (i < 5)
+                    content[i] = (byte) -1;
+                else if (content.length - i <= 5)
+                    content[i] = (byte) 1;
+                else
+                    content[i] = enc[i-5];
+            }
+            if (!L2pUtil.storeEnvelope(context, cookieHandle, SerializeTools.serializeToBase64(content), null, log))
             {
                 response.addProperty("status", 500);
                 response.addProperty("msg", "Error storing cookies.");
@@ -396,7 +503,7 @@ public class IdentityManager {
         } catch (Exception e) {
             log.printStackTrace(e);
             response.addProperty("status", 500);
-            response.addProperty("msg", "Error storing cookies.");
+            response.addProperty("msg", "Error encrypting cookies.");
             return response;
         }
         log.info("Cookies updated for user " + ownerId);
@@ -506,7 +613,7 @@ public class IdentityManager {
             Envelope headerEnvelope = context.requestEnvelope(getHeaderHandle(ownerId));
 
             // Make sure that user has the proper permissions to use the headers for the specified request
-            if (ownerId.equals(userId) || checkConsent(new Consent(ownerId, userId, reqUri, anon)))
+            if (ownerId.equals(userId) || checkConsent(context, new Consent(ownerId, userId, reqUri, anon)))
                 return ParserUtil.jsonToMap(ParserUtil.toJsonObject(headerEnvelope.getContent().toString()));
 
             return new HashMap<String, String>();
@@ -561,6 +668,24 @@ public class IdentityManager {
     }
 
     /**
+     * Helper function to create a signed hash from the given consent object
+     *
+     * @param context The current execution context required to fetch the cookies accessible to the current user
+     * @param consentObj An object specifying the consent parameters
+     * @return The hash computed over the consent object as JSON string signed by the service agent
+     */
+    // TODO this should probably happen on the blockchain, instead
+    private byte[] getConsentHash(ExecutionContext context, Consent consentObj) {
+        try {
+            return Util.soliditySha3(new String (CryptoTools.signContent(consentObj.toString()
+                            .getBytes(StandardCharsets.UTF_8), signKey.getPrivate())));
+        } catch(Exception e) {
+            log.printStackTrace(e);
+            return null;
+        }
+    }
+
+    /**
      * Function to see which cookies the current user is permitted to access
      *
      * @param context Current execution context (including requesting user)
@@ -592,15 +717,20 @@ public class IdentityManager {
      * @param consentObj The specific consent options
      * @return Status code and appropriate message as JSON object
      */
-    public boolean checkConsent(Consent consentObj) {
+    public boolean checkConsent(ExecutionContext context, Consent consentObj) {
         try {
-            byte[] consentHash = Util.soliditySha3(consentObj.toString());
+            // Create signed consent object
+            byte[] consentHash = getConsentHash(context, consentObj);
+            if (consentHash == null)
+                return false;
             log.info("Checking for consent " + ParserUtil.bytesToHex(consentHash));
             boolean result = consentRegistry.hashExists(consentHash).sendAsync().get();
 
             // Consent for non-anonymous requests also entails consent for anonymous ones
             if (!result && consentObj.getAnon()) {
-                consentHash = Util.soliditySha3(consentObj.setAnon(false).toString());
+                consentHash = getConsentHash(context, consentObj.setAnon(false));
+                if (consentHash == null)
+                    return false;
                 log.info("Checking for consent " + ParserUtil.bytesToHex(consentHash));
                 return consentRegistry.hashExists(consentHash).sendAsync().get();
             }
@@ -675,9 +805,14 @@ public class IdentityManager {
 
         // Store consent to blockchain
         try {
-            byte[] consentHash = Util.soliditySha3(consentObj.toString());
+            byte[] consentHash = getConsentHash(context, consentObj);
+            if (consentHash == null) {
+                response.addProperty("status", 500);
+                response.addProperty("msg", "Error creating consent hash");
+                return response;
+            }
             log.info("Storing consent " + ParserUtil.bytesToHex(consentHash));
-            consentRegistry.storeConsent(Util.soliditySha3(consentObj.toString())).sendAsync().get();
+            consentRegistry.storeConsent(consentHash).sendAsync().get();
         } catch (Exception e) {
             log.printStackTrace(e);
             response.addProperty("status", 500);
@@ -735,10 +870,15 @@ public class IdentityManager {
         }
 
         // Trying to revoke non-existent consent seems to cause issues
-        if (checkConsent(consentObj)) {
+        if (checkConsent(context, consentObj)) {
             // Revoke consent from blockchain
             try {
-                byte[] consentHash = Util.soliditySha3(consentObj.toString());
+                byte[] consentHash = getConsentHash(context, consentObj);
+                if (consentHash == null) {
+                    response.addProperty("status", 500);
+                    response.addProperty("msg", "Error creating consent hash");
+                    return response;
+                }
                 log.info("Revoking consent " + ParserUtil.bytesToHex(consentHash));
                 consentRegistry.revokeConsent(consentHash).sendAsync().get();
             } catch (Exception e) {

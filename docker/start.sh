@@ -20,7 +20,6 @@ NODE_ID_SEED=${NODE_ID_SEED:-$RANDOM}
 
 ETH_PROPS_DIR=/app/HyE-YouTube-Proxy/etc/
 ETH_PROPS=i5.las2peer.registry.data.RegistryConfiguration.properties
-CONTACT_PROPS=i5.las2peer.services.contactService.ContactService.properties
 HYE_PROPS=i5.las2peer.services.hyeYouTubeProxy.YouTubeProxy.properties
 export JAVA_HOME=/opt/jdk17 && export PATH=$PATH:$JAVA_HOME/bin
 
@@ -77,8 +76,6 @@ fi
 
 echo "service-agent-user.xml;${HYE_SERVICE_AGENT_PW}" > etc/startup/passphrases.txt
 
-sed -i "s|contactstorer|${HYE_SERVICE_AGENT_NAME}|" "${ETH_PROPS_DIR}${CONTACT_PROPS}"
-sed -i "s|supersecretpassword|${HYE_SERVICE_AGENT_PW}|" "${ETH_PROPS_DIR}${CONTACT_PROPS}"
 sed -i "s|hyeAgent|${HYE_SERVICE_AGENT_NAME}|" "${ETH_PROPS_DIR}${HYE_PROPS}"
 sed -i "s|changeme|${HYE_SERVICE_AGENT_PW}|" "${ETH_PROPS_DIR}${HYE_PROPS}"
 
@@ -191,6 +188,7 @@ if [ -n "$LAS2PEER_ETH_HOST" ]; then
         --ethereum-mnemonic "$(selectMnemonic)" \
         uploadStartupDirectory \
         $(echo $ADDITIONAL_LAUNCHER_ARGS) \
+	startService\(\"i5.las2peer.services.hyeYouTubeProxy.YouTubeProxy@0.2.0\"\) \
         startWebConnector \
         "node=getNodeAsEthereumNode()" "registry=node.getRegistryClient()" "n=getNodeAsEthereumNode()" "r=n.getRegistryClient()" \
         $(echo $ADDITIONAL_PROMPT_CMDS) \
@@ -205,6 +203,7 @@ else
         --node-id-seed $NODE_ID_SEED \
         uploadStartupDirectory \
         $(echo $ADDITIONAL_LAUNCHER_ARGS) \
+        startService\(\"i5.las2peer.services.hyeYouTubeProxy.YouTubeProxy@0.2.0\"\) \
         startWebConnector \
         $(echo $ADDITIONAL_PROMPT_CMDS) \
         interactive
