@@ -14,12 +14,25 @@ services:
       - ethereumStoragePersistent:/root/.ethereum/devchain
     command: /root/start.sh
   las2peer:
-    build: .
+    image: rwthacis/las2peer
     ports:
       - 8080:8080
+      - 9080:9080/tcp
+      - 9080:9080/udp
     environment:
       LAS2PEER_ETH_HOST: ethereum:8545
+      LAS2PEER_PORT: 9080
     depends_on:
       - ethereum
+  hye:
+    build: .
+    ports:
+      - 9081:9081/tcp
+      - 9081:9081/udp
+    environment:
+      LAS2PEER_ETH_HOST: ethereum:8545
+      LAS2PEER_PORT: 9081
+      BOOTSTRAP: las2peer:9080
+      SLEEP_FOR: 90
 volumes:
   ethereumStoragePersistent: {}

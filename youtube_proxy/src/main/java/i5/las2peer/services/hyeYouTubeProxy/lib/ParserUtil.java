@@ -5,6 +5,9 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.util.*;
 
 /**
@@ -151,4 +154,17 @@ public abstract class ParserUtil {
         return new String(hexChars);
     }
 
+    public static String readResponse(InputStream inputStream) {
+        BufferedReader br = new BufferedReader(new InputStreamReader((inputStream)));
+        StringBuilder sb = new StringBuilder();
+        String payload;
+        try {
+            while ((payload = br.readLine()) != null) {
+                sb.append(payload);
+            }
+            return sb.toString();
+        } catch(Exception e) {
+            return null;
+        }
+    }
 }

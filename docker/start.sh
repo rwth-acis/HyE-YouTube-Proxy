@@ -18,7 +18,7 @@ CONFIG_ENDPOINT_WAIT=${CONFIG_ENDPOINT_WAIT:-21600}
 
 NODE_ID_SEED=${NODE_ID_SEED:-$RANDOM}
 
-ETH_PROPS_DIR=/app/HyE-YouTube-Proxy/etc/
+PROPS_DIR=/app/HyE-YouTube-Proxy/etc/
 ETH_PROPS=i5.las2peer.registry.data.RegistryConfiguration.properties
 HYE_PROPS=i5.las2peer.services.hyeYouTubeProxy.YouTubeProxy.properties
 export JAVA_HOME=/opt/jdk17 && export PATH=$PATH:$JAVA_HOME/bin
@@ -35,13 +35,12 @@ function truffleMigrate {
     echo "    (Yes, this is a potential source of problems, maybe increase.)"
     sleep $EXTRA_ETH_WAIT
     echo "wait over, proceeding."
-    cd /app/las2peer-registry-contracts
-    ./node_modules/.bin/truffle migrate --network docker_boot 2>&1 | tee migration.log
+    cd /app/HyE-YouTube-Proxy/docker/registry-contracts
+    ./node_modules/.bin/truffle migrate --network docker_boot 2>&1 | tee migration-hye.log
     echo done. Setting contract addresses in config file ...
     # yeah, this isn't fun:
-    # addresses should already be in properties file
-    # cat migration.log | grep -A5 "\(Deploying\|Replacing\|contract address\) \'\(CommunityTagIndex\|UserRegistry\|ServiceRegistry\|GroupRegistry\|ReputationRegistry\)\'" | grep '\(Deploying\|Replacing\|contract address\)' | tr -d " '>:" | sed -e '$!N;s/\n//;s/Deploying//;s/Replacing//;s/contractaddress/Address = /;s/./\l&/' >> "${ETH_PROPS_DIR}${ETH_PROPS}"
-    cp migration.log /app/HyE-YouTube-Proxy/node-storage/migration.log
+    cat migration-hye.log | grep -A5 "\(Deploying\|Replacing\|contract address\) \'\(ConsentRegistry\)\'" | grep '\(Deploying\|Replacing\|contract address\)' | tr -d " '>:" | sed -e '$!N;s/\n//;s/Deploying//;s/Replacing//;s/contractaddress/Address = /;s/./\l&/' >> "${PROPS_DIR}${HYE_PROPS}"
+    cp migration-hye.log /app/HyE-YouTube-Proxy/node-storage/migration-hye.log
     echo done.
  }
 
@@ -50,7 +49,7 @@ if [ -n "$LAS2PEER_CONFIG_ENDPOINT" ]; then
     if waitForEndpoint $(host ${LAS2PEER_CONFIG_ENDPOINT}) $(port ${LAS2PEER_CONFIG_ENDPOINT}) $CONFIG_ENDPOINT_WAIT; then
         echo "Port is available (but that may just be the Docker daemon)."
         echo Downloading ...
-        wget --quiet --tries=inf "http://${LAS2PEER_CONFIG_ENDPOINT}/${ETH_PROPS}" -O "${ETH_PROPS_DIR}${ETH_PROPS}"
+        wget --quiet --tries=inf "http://${LAS2PEER_CONFIG_ENDPOINT}/${ETH_PROPS}" -O "${PROPS_DIR}${ETH_PROPS}"
         echo done.
     else
         echo Registry configuration endpoint specified but not accessible. Aborting.
@@ -61,8 +60,8 @@ fi
 if [ -n "$LAS2PEER_ETH_HOST" ]; then
     echo Replacing Ethereum client host in config files ...
     ETH_HOST_SUB=$(host $LAS2PEER_ETH_HOST)
-    sed -i "s|^endpoint.*$|endpoint = http://${LAS2PEER_ETH_HOST}|" "${ETH_PROPS_DIR}${ETH_PROPS}"
-    sed -i "s/eth-bootstrap/${ETH_HOST_SUB}/" /app/las2peer-registry-contracts/truffle.js
+    sed -i "s|^endpoint.*$|endpoint = http://${LAS2PEER_ETH_HOST}|" "${PROPS_DIR}${ETH_PROPS}"
+    sed -i "s/eth-bootstrap/${ETH_HOST_SUB}/" /app/HyE-YouTube-Proxy/docker/registry-contracts/truffle.js
     echo done.
 fi
 
@@ -76,51 +75,25 @@ fi
 
 echo "service-agent-user.xml;${HYE_SERVICE_AGENT_PW}" > etc/startup/passphrases.txt
 
-sed -i "s|hyeAgent|${HYE_SERVICE_AGENT_NAME}|" "${ETH_PROPS_DIR}${HYE_PROPS}"
-sed -i "s|changeme|${HYE_SERVICE_AGENT_PW}|" "${ETH_PROPS_DIR}${HYE_PROPS}"
-
-if [ -n "$CONSENT_REGISTRY_ADDRESS" ]; then
-    sed -i "s|0xC58238a482e929584783d13A684f56Ca5249243E|${CONSENT_REGISTRY_ADDRESS}|" "${ETH_PROPS_DIR}${HYE_PROPS}"
-fi
-
-if [ -n "$COMMUNITY_TAG_INDEX" ]; then
-    sed -i "s|0xeB510FB89C25cc1Af61fE45B965b5Fe27F1BCBa0|${COMMUNITY_TAG_INDEX}|" "${ETH_PROPS_DIR}${ETH_PROPS}"
-fi
-
-if [ -n "$USER_REGISTRY_ADDRESS" ]; then
-    sed -i "s|0x0e8acA05A8B35516504690Fa97fAEa69bbAFf901|${USER_REGISTRY_ADDRESS}|" "${ETH_PROPS_DIR}${ETH_PROPS}"
-fi
-
-if [ -n "$REPUTATION_REGISTRY_ADDRESS" ]; then
-    sed -i "s|0xd35284B7644732094338559c13a5CE880D247D37|${REPUTATION_REGISTRY_ADDRESS}|" "${ETH_PROPS_DIR}${ETH_PROPS}"
-fi
-
-if [ -n "$GROUP_REGISTRY_ADDRESS" ]; then
-    sed -i "s|0x1A37393184eD5D0040521728cBbfc819e07E9d20|${GROUP_REGISTRY_ADDRESS}|" "${ETH_PROPS_DIR}${ETH_PROPS}"
-fi
-
-if [ -n "$SERVICE_REGISTRY_ADDRESS" ]; then
-    sed -i "s|0x4930DC85997124F6cFBe8fAE727EA69E9577BBBc|${SERVICE_REGISTRY_ADDRESS}|" "${ETH_PROPS_DIR}${ETH_PROPS}"
-fi
+sed -i "s|hyeAgent|${HYE_SERVICE_AGENT_NAME}|" "${PROPS_DIR}${HYE_PROPS}"
+sed -i "s|changeme|${HYE_SERVICE_AGENT_PW}|" "${PROPS_DIR}${HYE_PROPS}"
 
 if [ -n "$WEBCONNECTOR_URL" ]; then
-    sed -i "s|http://localhost:8081/hye-youtube/|${WEBCONNECTOR_URL}|" "${ETH_PROPS_DIR}${HYE_PROPS}"
+    sed -i "s|http://localhost:8081/hye-youtube/|${WEBCONNECTOR_URL}|" "${PROPS_DIR}${HYE_PROPS}"
 fi
 
 if [ -n "$FRONTEND_URLS" ]; then
-    sed -i "s|frontendUrls = localhost:8081|frontendUrls = ${FRONTEND_URLS}|" "${ETH_PROPS_DIR}${HYE_PROPS}"
+    sed -i "s|frontendUrls = localhost:8081|frontendUrls = ${FRONTEND_URLS}|" "${PROPS_DIR}${HYE_PROPS}"
 fi
 
 if [ -z "$SLEEP_FOR" ]; then
     SLEEP_FOR=30
 fi
 
-if [ -s "/app/HyE-YouTube-Proxy/node-storage/migration.log" ]; then
-    echo Found old migration.log, importing...
-    cat /app/HyE-YouTube-Proxy/node-storage/migration.log
-
-    cat /app/HyE-YouTube-Proxy/node-storage/migration.log | grep -A5 "\(Deploying\|Replacing\|contract address\) \'\(CommunityTagIndex\|UserRegistry\|ServiceRegistry\|GroupRegistry\|ReputationRegistry\)\'" | grep '\(Deploying\|Replacing\|contract address\)' | tr -d " '>:" | sed -e '$!N;s/\n//;s/Deploying//;s/Replacing//;s/contractaddress/Address = /;s/./\l&/' >> "${ETH_PROPS_DIR}${ETH_PROPS}"
-
+if [ -s "/app/HyE-YouTube-Proxy/node-storage/migration-hye.log" ]; then
+    echo Found old migration-hye.log, importing...
+    cat /app/HyE-YouTube-Proxy/node-storage/migration-hye.log
+    cat /app/HyE-YouTube-Proxy/node-storage/migration-hye.log | grep -A5 "\(Deploying\|Replacing\|contract address\) \'\(ConsentRegistry\)\'" | grep '\(Deploying\|Replacing\|contract address\)' | tr -d " '>:" | sed -e '$!N;s/\n//;s/Deploying//;s/Replacing//;s/contractaddress/Address = /;s/./\l&/' >> "${PROPS_DIR}${HYE_PROPS}"
     echo done.
 fi
 
@@ -131,7 +104,7 @@ else
         # echo Waiting for Ethereum client at $(host $LAS2PEER_ETH_HOST):$(port $LAS2PEER_ETH_HOST)...
         # if waitForEndpoint $(host $LAS2PEER_ETH_HOST) $(port $LAS2PEER_ETH_HOST) 300; then
             # echo Found Eth client.
-        if [ -s "/app/HyE-YouTube-Proxy/node-storage/migration.log" ]; then
+        if [ -s "/app/HyE-YouTube-Proxy/node-storage/migration-hye.log" ]; then
             echo Migrated from logs.
         else
             # wait for seems broken somehow

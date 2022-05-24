@@ -24,15 +24,7 @@ import org.jsoup.select.Elements;
  */
 
 public abstract class YouTubeParser {
-
-    private final static String METADATA_CLASS = "ytd-video-meta-block";
-    private final static String THUMBNAIL_TAG = "ytd-thumbnail";
-    private final static String IMAGE_TAG = "img";
-    private final static String LINK_TAG = "a";
-    private final static String SECONDARY_TAG = "secondary";
-
     private static final L2pLogger log = L2pLogger.getInstance(YouTubeProxy.class.getName());
-
     /**
      * Helper function used to find the given object key in the given html code and convert its value into a Json object
      *
@@ -108,7 +100,7 @@ public abstract class YouTubeParser {
      * @param html the HTML of YouTube's main page
      * @return Personalized YouTube recommendations
      */
-    private static ArrayList<Recommendation> getRecsFromMainJS(String html) {
+    public static ArrayList<Recommendation> mainPage(String html) {
         ArrayList<Recommendation> recs = new ArrayList<Recommendation>();
         final String mainObjKey = "twoColumnBrowseResultsRenderer";
 
@@ -141,7 +133,7 @@ public abstract class YouTubeParser {
      * @param html the HTML of YouTube video page
      * @return Personalized YouTube recommendations
      */
-    private static ArrayList<Recommendation> getRecsFromAsideJS(String html) {
+    public static ArrayList<Recommendation> aside(String html) {
         ArrayList<Recommendation> recs = new ArrayList<Recommendation>();
         final String mainObjKey = "twoColumnWatchNextResults";
 
@@ -177,7 +169,7 @@ public abstract class YouTubeParser {
      * @param html the HTML of YouTube results page
      * @return Personalized YouTube search results
      */
-    private static ArrayList<Recommendation> getRecsFromResultsJS(String html) {
+    public static ArrayList<Recommendation> resultsPage(String html) {
         ArrayList<Recommendation> recs = new ArrayList<Recommendation>();
         final String mainObjKey = "twoColumnSearchResultsRenderer";
 
@@ -201,102 +193,5 @@ public abstract class YouTubeParser {
         // Get recommendation data from array
         recs = parseRecsFromContents(contents);
         return recs;
-    }
-
-    /**
-     * Parses the given HTML and extracts YouTube video recommendations
-     *
-     * @param html the HTML of YouTube's main page
-     * @return Personalized YouTube recommendations
-     */
-    public static ArrayList<Recommendation> mainPage(String html) {
-          // The proper scraping is unfortunately a bit too inconsistent
-//        ArrayList<Recommendation> recs = new ArrayList<Recommendation>();
-//        Document doc = Jsoup.parse(html);
-//        Element body = doc.body();
-//        Elements thumbnails = body.getElementsByTag(THUMBNAIL_TAG);
-//        Iterator<Element> it = thumbnails.iterator();
-//        while (it.hasNext()) {
-//            Element recommendation = it.next().parent();
-//            Elements imgs = recommendation.getElementsByTag(IMAGE_TAG);
-//            Elements links = recommendation.getElementsByTag(LINK_TAG);
-//            Elements metaBlock = recommendation.getElementsByClass(METADATA_CLASS);
-//
-//            Recommendation rec = RecommendationBuilder.build(imgs, links, metaBlock);
-//            if (rec == null)
-//                log.warning("Error creating recommendation object from HTML data");
-//            else
-//                recs.add(rec);
-//        }
-//
-        // If no recommendations were found, try another way
-//        if (recs.isEmpty())
-            return getRecsFromMainJS(html);
-//        else
-//            return recs;
-    }
-
-    /**
-     * Parses the given HTML and extracts YouTube video recommendations
-     *
-     * @param html the HTML of the YouTube video page
-     * @return Personalized YouTube recommendations
-     */
-    public static ArrayList<Recommendation> aside(String html) {
-        ArrayList<Recommendation> recs = new ArrayList<Recommendation>();
-        Document doc = Jsoup.parse(html);
-        Element body = doc.body();
-        Elements thumbnails = body.getElementsByTag(THUMBNAIL_TAG);
-        Iterator<Element> it = thumbnails.iterator();
-        while (it.hasNext()) {
-            Element recommendation = it.next().parent();
-            Elements imgs = recommendation.getElementsByTag(IMAGE_TAG);
-            Elements links = recommendation.getElementsByTag(LINK_TAG);
-
-            Recommendation rec = RecommendationBuilder.build(imgs, links);
-            if (rec == null)
-                log.warning("Error creating recommendation object from HTML data");
-            else
-                recs.add(rec);
-        }
-
-        // If no recommendations were found, try another way
-        if (recs.isEmpty())
-            return getRecsFromAsideJS(html);
-        else
-            return recs;
-    }
-
-    /**
-     * Parses the given HTML and extracts YouTube video recommendations
-     *
-     * @param html the HTML of YouTube search results page
-     * @return Personalized YouTube search results
-     */
-    public static ArrayList<Recommendation> resultsPage(String html) {
-        ArrayList<Recommendation> recs = new ArrayList<Recommendation>();
-        // This seems to cause problems sometimes ...
-        Document doc = Jsoup.parse(html);
-        Element body = doc.body();
-        Elements thumbnails = body.getElementsByTag(THUMBNAIL_TAG);
-        Iterator<Element> it = thumbnails.iterator();
-        while (it.hasNext()) {
-            Element recommendation = it.next().parent();
-            Elements imgs = recommendation.getElementsByTag(IMAGE_TAG);
-            Elements links = recommendation.getElementsByTag(LINK_TAG);
-            Elements metaBlock = recommendation.getElementsByTag(METADATA_CLASS);
-       
-            Recommendation rec = RecommendationBuilder.build(imgs, links, metaBlock);
-            if (rec == null)
-                log.warning("Error creating recommendation object from HTML data");
-            else
-                recs.add(rec);
-        }
-
-        // If no recommendations were found, try another way
-        if (recs.isEmpty())
-            return getRecsFromResultsJS(html);
-        else
-            return recs;
     }
 }

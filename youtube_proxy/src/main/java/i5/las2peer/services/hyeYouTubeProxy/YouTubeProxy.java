@@ -1,18 +1,23 @@
 package i5.las2peer.services.hyeYouTubeProxy;
 
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
 import java.io.Serializable;
 import java.net.HttpURLConnection;
 
 import java.net.URI;
+import java.net.URL;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
 
 import java.util.*;
 import java.util.logging.Level;
 
 import javax.ws.rs.*;
+import javax.ws.rs.core.Cookie;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 
@@ -22,7 +27,6 @@ import com.google.gson.JsonObject;
 
 import i5.las2peer.api.Context;
 import i5.las2peer.api.persistency.Envelope;
-import i5.las2peer.api.persistency.EnvelopeNotFoundException;
 import i5.las2peer.api.security.UserAgent;
 import i5.las2peer.execution.ExecutionContext;
 import i5.las2peer.logging.L2pLogger;
@@ -45,14 +49,6 @@ import io.swagger.annotations.Contact;
 import io.swagger.annotations.Info;
 import io.swagger.annotations.License;
 import io.swagger.annotations.SwaggerDefinition;
-import io.swagger.util.Json;
-
-import com.microsoft.playwright.Browser;
-import com.microsoft.playwright.BrowserContext;
-import com.microsoft.playwright.Page;
-import com.microsoft.playwright.Playwright;
-import com.microsoft.playwright.options.Cookie;
-// import com.microsoft.playwright.options.LoadState;
 
 /**`
  * HyE - YouTube Proxy
@@ -96,7 +92,6 @@ public class YouTubeProxy extends RESTService {
 	private String serviceAgentPw;
 
 	private static final L2pLogger log = L2pLogger.getInstance(YouTubeProxy.class.getName());
-	private static Browser browser = null;
 	private static boolean initialized = false;
 	private static IdentityManager idm = null;
 	private static Random rand = null;
@@ -114,10 +109,6 @@ public class YouTubeProxy extends RESTService {
 				", frontendUrls = " + frontendUrls + ", serviceAgentName = " + serviceAgentName +
 				", serviceAgentPw = " + serviceAgentPw);
 
-		if (browser == null) {
-			Playwright playwright = Playwright.create();
-			browser = playwright.chromium().launch();
-		}
 		if (idm == null) {
 			// Do not allow to use static cookies/headers for production
 			if (debug != null && debug.equals("true"))
@@ -227,23 +218,21 @@ public class YouTubeProxy extends RESTService {
 	 * Helper function to set the browser context i.e., getting cookies (and headers) from las2peer storage for request.
 	 *
 	 * @param l2pContext The current execution context from which the method is called
-	 * @param browserContext The browser context to which the cookies (and headers) are added
+	 * @param connection The HttpURLConnection object to which the cookies (and headers) are added
 	 * @param ownerId If the request is made for a particular user, this refers to this user's las2peer ID
 	 * @param request The URI of the request for which the cookies (and headers) are used
 	 * @return Either an error code and appropriate message or {200: "OK"} to indicate success
 	 */
-	private JsonObject setContext(ExecutionContext l2pContext, BrowserContext browserContext, String ownerId,
+	private JsonObject setContext(ExecutionContext l2pContext, HttpURLConnection connection, String ownerId,
 								  String request) {
 		JsonObject response = new JsonObject();
 		if (!initialized) {
-			browserContext.close();
 			response.addProperty("500", "Service not initialized!");
 			return response;
 		}
 
 		// No cookies, no play
 		if (!(debug != null && debug.equals("true")) && !hasCookies(l2pContext)) {
-			browserContext.close();
 			response.addProperty("403",
 					"Please upload a valid set of YouTube cookies to use this service!");
 			return response;
@@ -259,12 +248,10 @@ public class YouTubeProxy extends RESTService {
 		HashMap<String, String> headers = idm.getHeaders(l2pContext, ownerId, ROOT_URI, anon);
 
 		if (cookies == null) {
-			browserContext.close();
 			response.addProperty("500", "Could not retrieve cookies.");
 			return response;
 		}
 		if (cookies.isEmpty()) {
-			browserContext.close();
 			response.addProperty("401", "Lacking consent for request.");
 			return response;
 		}
@@ -273,21 +260,22 @@ public class YouTubeProxy extends RESTService {
 				// TODO clean this part up a bit
 		        log.info("Setting cookies:");
 		        for (Cookie cookie : cookies) {
-					log.info(cookie.name + ": " + cookie.value);
-					ArrayList<Cookie> singleCookieList = new ArrayList<Cookie>();
-					singleCookieList.add(cookie);
+					String cookieString = cookie.getName() + "=" + cookie.getValue();
+					log.info(cookieString);
 					try {
-    					    browserContext.addCookies(singleCookieList);
+    					    connection.setRequestProperty("Cookie", cookieString);
     					} catch (Exception e) {
     					    log.printStackTrace(e);
     					}
 				}
-			if (headers != null)
-				browserContext.setExtraHTTPHeaders(headers);
+			if (headers != null) {
+				for (String key : headers.keySet()) {
+					connection.setRequestProperty(key, headers.get(key));
+				}
+			}
 		} catch (Exception e) {
 			log.printStackTrace(e);
 			response.addProperty("500", "Error setting request context.");
-			browserContext.close();
 			return response;
 		}
 		response.addProperty("200", "OK");
@@ -506,31 +494,38 @@ public class YouTubeProxy extends RESTService {
 			return buildResponse(500, response.toString());
 		}
 
-		BrowserContext context = browser.newContext();
+		HttpURLConnection connection;
+		try {
+			connection = (HttpURLConnection) new URL(YOUTUBE_MAIN_PAGE).openConnection();
+			connection.setRequestMethod("GET");
+			connection.setDoOutput(true);
+		} catch (Exception e) {
+			log.printStackTrace(e);
+			response.addProperty("500", "Error establishing connection to YouTube.");
+			return buildResponse(500, response.toString());
+		}
 		// Technically not what the request string was originally intended for, but useful for user study
 		String request = L2pUtil.randomString(20);
 		// TODO replace random String with requestUri from request data
-		response = setContext(l2pContext, context, ownerId, request);
+		response = setContext(l2pContext, connection, ownerId, request);
 		if (!response.has("200"))
 			return buildResponse(Integer.parseInt((String) response.keySet().toArray()[0]), response.toString());
 		else
 			response = new JsonObject();
 
 		try {
-			Page page = context.newPage();
-			com.microsoft.playwright.Response resp = page.navigate(YOUTUBE_MAIN_PAGE);
-			// Wait until all content is loaded (doesn't seem to work that well, so let's skip it)
-			// page.waitForLoadState(LoadState.NETWORKIDLE);
-			if (debug != null && debug.equals("true"))
-				page.screenshot(new Page.ScreenshotOptions().setPath(Paths.get("test.png")));
-			if (resp.status() != 200) {
-				log.severe(resp.statusText());
+			connection.connect();
+			if (connection.getResponseCode() != 200) {
+				log.severe(connection.getResponseMessage());
 				response.addProperty("500", "Could not get YouTube main page.");
-				context.close();
 				return buildResponse(500, response.toString());
 			}
-			ArrayList<Recommendation> recommendations = YouTubeParser.mainPage(page.content());
-			context.close();
+			String ytResponse = ParserUtil.readResponse(connection.getInputStream());
+			if (ytResponse == null) {
+				response.addProperty("500", "Error reading response returned by YouTube.");
+				return buildResponse(500, response.toString());
+			}
+			ArrayList<Recommendation> recommendations = YouTubeParser.mainPage(ytResponse);
 			JsonArray responseBody = ParserUtil.toJsonArray(recommendations);
 			JsonObject oneTimeCode = new JsonObject();
 			oneTimeCode.addProperty("oneTimeCode", request);
@@ -538,7 +533,6 @@ public class YouTubeProxy extends RESTService {
 			return buildResponse(200, responseBody.toString());
 		} catch (Exception e) {
 			log.printStackTrace(e);
-			context.close();
 			response.addProperty("500", "Unspecified server error.");
 			return buildResponse(500, response.toString());
 		}
@@ -579,31 +573,38 @@ public class YouTubeProxy extends RESTService {
 			return buildResponse(400, response.toString());
 		}
 
-		BrowserContext context = browser.newContext();
+		HttpURLConnection connection;
+		try {
+			connection = (HttpURLConnection) new URL(getVideoUrl(videoId)).openConnection();
+			connection.setRequestMethod("GET");
+			connection.setDoOutput(true);
+		} catch (Exception e) {
+			log.printStackTrace(e);
+			response.addProperty("500", "Error establishing connection to YouTube.");
+			return buildResponse(500, response.toString());
+		}
 		// Technically not what the request string was originally intended for, but useful for user study
 		String request = L2pUtil.randomString(20);
 		// TODO replace random String with requestUri from request data
-		response = setContext(l2pContext, context, ownerId, request);
+		response = setContext(l2pContext, connection, ownerId, request);
 		if (!response.has("200"))
 			return buildResponse(Integer.parseInt((String) response.keySet().toArray()[0]), response.toString());
 		else
 			response = new JsonObject();
 
 		try {
-			Page page = context.newPage();
-			com.microsoft.playwright.Response resp = page.navigate(getVideoUrl(videoId));
-			// Wait until all content is loaded (doesn't seem to work that well, so let's skip it)
-			// page.waitForLoadState(LoadState.NETWORKIDLE);
-			if (debug != null && debug.equals("true"))
-				page.screenshot(new Page.ScreenshotOptions().setPath(Paths.get("test.png")));
-			if (resp.status() != 200) {
-				log.severe(resp.statusText());
-				response.addProperty("500", "Could not get recommendations for video " + videoId);
-				context.close();
+			connection.connect();
+			if (connection.getResponseCode() != 200) {
+				log.severe(connection.getResponseMessage());
+				response.addProperty("500", "Could not get YouTube main page.");
 				return buildResponse(500, response.toString());
 			}
-			ArrayList<Recommendation> recommendations = YouTubeParser.aside(page.content());
-			context.close();
+			String ytResponse = ParserUtil.readResponse(connection.getInputStream());
+			if (ytResponse == null) {
+				response.addProperty("500", "Error reading response returned by YouTube.");
+				return buildResponse(500, response.toString());
+			}
+			ArrayList<Recommendation> recommendations = YouTubeParser.aside(ytResponse);
 			JsonArray responseBody = ParserUtil.toJsonArray(recommendations);
 			JsonObject oneTimeCode = new JsonObject();
 			oneTimeCode.addProperty("oneTimeCode", request);
@@ -611,7 +612,6 @@ public class YouTubeProxy extends RESTService {
 			return buildResponse(200, responseBody.toString());
 		} catch (Exception e) {
 			log.printStackTrace(e);
-			context.close();
 			response.addProperty("500", "Unspecified server error.");
 			return buildResponse(500, response.toString());
 		}
@@ -652,31 +652,38 @@ public class YouTubeProxy extends RESTService {
 			return buildResponse(400, response.toString());
 		}
 
-		BrowserContext context = browser.newContext();
+		HttpURLConnection connection;
+		try {
+			connection = (HttpURLConnection) new URL(getResultsUrl(searchQuery)).openConnection();
+			connection.setRequestMethod("GET");
+			connection.setDoOutput(true);
+		} catch (Exception e) {
+			log.printStackTrace(e);
+			response.addProperty("500", "Error establishing connection to YouTube.");
+			return buildResponse(500, response.toString());
+		}
 		// Technically not what the request string was originally intended for, but useful for user study
 		String request = L2pUtil.randomString(20);
 		// TODO replace random String with requestUri from request data
-		response = setContext(l2pContext, context, ownerId, request);
+		response = setContext(l2pContext, connection, ownerId, request);
 		if (!response.has("200"))
 			return buildResponse(Integer.parseInt((String) response.keySet().toArray()[0]), response.toString());
 		else
 			response = new JsonObject();
 
 		try {
-			Page page = context.newPage();
-			com.microsoft.playwright.Response resp = page.navigate(getResultsUrl(searchQuery));
-			// Wait until all content is loaded (doesn't seem to work that well, so let's skip it)
-			// page.waitForLoadState(LoadState.NETWORKIDLE);
-			if (debug != null && debug.equals("true"))
-				page.screenshot(new Page.ScreenshotOptions().setPath(Paths.get("test.png")));
-			if (resp.status() != 200) {
-				log.severe(resp.statusText());
-				response.addProperty("500", "Could not get YouTube results for query " + searchQuery);
-				context.close();
+			connection.connect();
+			if (connection.getResponseCode() != 200) {
+				log.severe(connection.getResponseMessage());
+				response.addProperty("500", "Could not get YouTube main page.");
 				return buildResponse(500, response.toString());
 			}
-			ArrayList<Recommendation> recommendations = YouTubeParser.resultsPage(page.content());
-			context.close();
+			String ytResponse = ParserUtil.readResponse(connection.getInputStream());
+			if (ytResponse == null) {
+				response.addProperty("500", "Error reading response returned by YouTube.");
+				return buildResponse(500, response.toString());
+			}
+			ArrayList<Recommendation> recommendations = YouTubeParser.resultsPage(ytResponse);
 			JsonArray responseBody = ParserUtil.toJsonArray(recommendations);
 			JsonObject oneTimeCode = new JsonObject();
 			oneTimeCode.addProperty("oneTimeCode", request);
@@ -684,7 +691,6 @@ public class YouTubeProxy extends RESTService {
 			return buildResponse(200, responseBody.toString());
 		} catch (Exception e) {
 			log.printStackTrace(e);
-			context.close();
 			response.addProperty("500", "Unspecified server error");
 			return buildResponse(500, response.toString());
 		}

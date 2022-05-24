@@ -1,17 +1,9 @@
 package i5.las2peer.services.hyeYouTubeProxy.identityManagement;
 
-import i5.las2peer.api.Context;
-import i5.las2peer.api.persistency.EnvelopeNotFoundException;
-import i5.las2peer.api.security.Agent;
-import i5.las2peer.api.security.PassphraseAgent;
-import i5.las2peer.api.security.ServiceAgent;
 import i5.las2peer.execution.ExecutionContext;
 import i5.las2peer.api.persistency.Envelope;
 import i5.las2peer.p2p.EthereumNode;
-import i5.las2peer.security.AgentImpl;
-import i5.las2peer.security.MessageHandler;
 import i5.las2peer.security.ServiceAgentImpl;
-import i5.las2peer.security.UserAgentImpl;
 import i5.las2peer.serialization.SerializeTools;
 import i5.las2peer.services.hyeYouTubeProxy.YouTubeProxy;
 import i5.las2peer.logging.L2pLogger;
@@ -24,18 +16,16 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
-import com.microsoft.playwright.options.Cookie;
 import i5.las2peer.services.hyeYouTubeProxy.lib.L2pUtil;
 import i5.las2peer.services.hyeYouTubeProxy.lib.ParserUtil;
 import i5.las2peer.tools.CryptoTools;
 
 import javax.crypto.SecretKey;
+import javax.ws.rs.core.Cookie;
 import java.io.File;
 import java.io.FileReader;
-import java.io.Serializable;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
-import java.security.PublicKey;
 import java.util.*;
 
 /**
@@ -104,8 +94,8 @@ public class IdentityManager {
         for (short i = 0; i < cookieList.size(); ++i) {
             try {
                 JsonObject cookieObj = cookieList.get(i).getAsJsonObject();
-                cookies.add(new Cookie(cookieObj.get("name").getAsString(), cookieObj.get("value").getAsString())
-                        .setDomain(cookieObj.get("domain").getAsString()).setPath(YOUTUBE_COOKIE_PATH));
+                cookies.add(new Cookie(cookieObj.get("name").getAsString(), cookieObj.get("value").getAsString(),
+                        YOUTUBE_COOKIE_PATH, cookieObj.get("domain").getAsString()));
             } catch (Exception e) {
                 log.info("Failed to parse cookie object " + i + " from file " + cookieFile + ". Skipping!");
                 log.printStackTrace(e);
@@ -243,11 +233,11 @@ public class IdentityManager {
 
                 result.add(new Cookie(
                         cookieObj.get("name").getAsString(),
-                        cookieObj.get("value").getAsString())
-                        .setDomain(cookieObj.get("domain").getAsString())
-                        .setPath(cookieObj.get("path").getAsString())
+                        cookieObj.get("value").getAsString(),
+                        cookieObj.get("path").getAsString(),
+                        cookieObj.get("domain").getAsString()));
                         // Cookies which name start with underscore, have to be secure
-                        .setSecure(cookieObj.get("name").getAsString().startsWith("_")));
+                        //.setSecure(cookieObj.get("name").getAsString().startsWith("_")));
             }
         } catch (Exception e) {
             return null;
