@@ -13,17 +13,17 @@ USER las2peer
 WORKDIR /app
 RUN git clone https://github.com/ettore26/wait-for-command
 
-RUN echo "Building HyE - YouTubeProxy service..."
 WORKDIR /app
+RUN echo "Building HyE-YouTube-Proxy ..."
 RUN git clone https://github.com/rwth-acis/HyE-YouTube-Proxy.git
 WORKDIR /app/HyE-YouTube-Proxy
+RUN git checkout origin/no-playwright
 RUN export GRADLE_OPTS="-Dfile.encoding=utf-8" && ./gradlew build --exclude-task test --exclude-task javadoc
 
 # Copy service
 RUN cp youtube_proxy/export/jars/* lib/
 COPY --chown=las2peer:las2peer . /app/HyE-YouTube-Proxy/
 RUN mkdir -p node-storage
-RUN mkdir -p etc/startup
 
 # Build registry contract
 WORKDIR /app/HyE-YouTube-Proxy/docker/registry-contracts
@@ -31,5 +31,7 @@ RUN npm install
 
 # Unfortunately, playwright seems to require root privileges... That should be fixed, but who's got the time
 #USER root
-WORKDIR /app/HyE-YouTube-Proxy/docker
+WORKDIR /app/HyE-YouTube-Proxy
+RUN mv docker/start.sh ./
+RUN mv docker/etc/pastry.properties ./etc
 ENTRYPOINT ./start.sh

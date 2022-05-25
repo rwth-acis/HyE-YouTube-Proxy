@@ -21,7 +21,6 @@ NODE_ID_SEED=${NODE_ID_SEED:-$RANDOM}
 PROPS_DIR=/app/HyE-YouTube-Proxy/etc/
 ETH_PROPS=i5.las2peer.registry.data.RegistryConfiguration.properties
 HYE_PROPS=i5.las2peer.services.hyeYouTubeProxy.YouTubeProxy.properties
-export JAVA_HOME=/opt/jdk17 && export PATH=$PATH:$JAVA_HOME/bin
 
 function waitForEndpoint {
     /app/wait-for-command/wait-for-command.sh -c "nc -z ${1} ${2:-80}" --time ${3:-10} --quiet
@@ -73,6 +72,7 @@ if [[ -z "$HYE_SERVICE_AGENT_PW" ]]; then
     HYE_SERVICE_AGENT_PW="changeme"
 fi
 
+touch etc/startup/passphrases.txt
 echo "service-agent-user.xml;${HYE_SERVICE_AGENT_PW}" > etc/startup/passphrases.txt
 
 sed -i "s|hyeAgent|${HYE_SERVICE_AGENT_NAME}|" "${PROPS_DIR}${HYE_PROPS}"
@@ -84,10 +84,6 @@ fi
 
 if [ -n "$FRONTEND_URLS" ]; then
     sed -i "s|frontendUrls = localhost:8081|frontendUrls = ${FRONTEND_URLS}|" "${PROPS_DIR}${HYE_PROPS}"
-fi
-
-if [ -z "$SLEEP_FOR" ]; then
-    SLEEP_FOR=30
 fi
 
 if [ -s "/app/HyE-YouTube-Proxy/node-storage/migration-hye.log" ]; then
@@ -131,7 +127,7 @@ if [ -n "$LAS2PEER_BOOTSTRAP" ]; then
     fi
 fi
 
-${JAVA_HOME}/bin/java -cp "lib/*" i5.las2peer.tools.UserAgentGenerator ${HYE_SERVICE_AGENT_PW} ${HYE_SERVICE_AGENT_NAME} fake@emial.com > etc/startup/service-agent-user.xml
+java -cp "lib/*" i5.las2peer.tools.UserAgentGenerator ${HYE_SERVICE_AGENT_PW} ${HYE_SERVICE_AGENT_NAME} fake@emial.com > etc/startup/service-agent-user.xml
 
 # it's realistic for different nodes to use different accounts (i.e., to have
 # different node operators). this function echos the N-th mnemonic if the
@@ -153,7 +149,7 @@ echo external_address = $(curl -s https://ipinfo.io/ip):${LAS2PEER_PORT} > etc/p
 echo Starting las2peer node ...
 if [ -n "$LAS2PEER_ETH_HOST" ]; then
     echo ... using ethereum boot procedure:
-    ${JAVA_HOME}/bin/java $([ -n "$ADDITIONAL_JAVA_ARGS" ] && echo $ADDITIONAL_JAVA_ARGS) -cp "lib/*" --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.util=ALL-UNNAMED i5.las2peer.tools.L2pNodeLauncher \
+    java $([ -n "$ADDITIONAL_JAVA_ARGS" ] && echo $ADDITIONAL_JAVA_ARGS) -cp "lib/*" --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.util=ALL-UNNAMED i5.las2peer.tools.L2pNodeLauncher \
         --service-directory service \
         --port $LAS2PEER_PORT \
         $([ -n "$LAS2PEER_BOOTSTRAP" ] && echo "--bootstrap $LAS2PEER_BOOTSTRAP") \
@@ -168,7 +164,7 @@ if [ -n "$LAS2PEER_ETH_HOST" ]; then
         interactive
 else
     echo ... using non-ethereum boot procedure:
-    ${JAVA_HOME}/bin/java $(echo $ADDITIONAL_JAVA_ARGS) \
+    java $(echo $ADDITIONAL_JAVA_ARGS) \
         -cp "lib/*" --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.util=ALL-UNNAMED i5.las2peer.tools.L2pNodeLauncher \
         --service-directory service \
         --port $LAS2PEER_PORT \

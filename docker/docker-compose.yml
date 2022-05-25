@@ -33,6 +33,8 @@ services:
       LAS2PEER_ETH_HOST: ethereum:8545
       LAS2PEER_PORT: 9081
       BOOTSTRAP: las2peer:9080
-      SLEEP_FOR: 90
+      EXTRA_ETH_WAIT: 120
+    depends_on:
+      - las2peer
 volumes:
   ethereumStoragePersistent: {}
