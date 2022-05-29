@@ -257,17 +257,12 @@ public class YouTubeProxy extends RESTService {
 		}
 
 		try {
-				// TODO clean this part up a bit
 		        log.info("Setting cookies:");
-		        for (Cookie cookie : cookies) {
-					String cookieString = cookie.getName() + "=" + cookie.getValue();
-					log.info(cookieString);
-					try {
-    					    connection.setRequestProperty("Cookie", cookieString);
-    					} catch (Exception e) {
-    					    log.printStackTrace(e);
-    					}
-				}
+		        String cookieString = "";
+		        for (Cookie cookie : cookies)
+				cookieString += cookie.getName() + "=" + cookie.getValue() + ";";
+			System.out.println(cookieString);
+    			connection.setRequestProperty("Cookie", cookieString);
 			if (headers != null) {
 				for (String key : headers.keySet()) {
 					connection.setRequestProperty(key, headers.get(key));
@@ -514,6 +509,8 @@ public class YouTubeProxy extends RESTService {
 			response = new JsonObject();
 
 		try {
+			for (String key : connection.getRequestProperties().keySet())
+				System.out.println(key + ": " + connection.getRequestProperties().get(key).toString());
 			connection.connect();
 			if (connection.getResponseCode() != 200) {
 				log.severe(connection.getResponseMessage());
@@ -596,7 +593,7 @@ public class YouTubeProxy extends RESTService {
 			connection.connect();
 			if (connection.getResponseCode() != 200) {
 				log.severe(connection.getResponseMessage());
-				response.addProperty("500", "Could not get YouTube main page.");
+				response.addProperty("500", "Could not get YouTube page for given video.");
 				return buildResponse(500, response.toString());
 			}
 			String ytResponse = ParserUtil.readResponse(connection.getInputStream());
@@ -675,7 +672,7 @@ public class YouTubeProxy extends RESTService {
 			connection.connect();
 			if (connection.getResponseCode() != 200) {
 				log.severe(connection.getResponseMessage());
-				response.addProperty("500", "Could not get YouTube main page.");
+				response.addProperty("500", "Could not get YouTube page for given search term.");
 				return buildResponse(500, response.toString());
 			}
 			String ytResponse = ParserUtil.readResponse(connection.getInputStream());

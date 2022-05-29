@@ -14,7 +14,6 @@ WORKDIR /app
 RUN git clone https://github.com/ettore26/wait-for-command
 
 WORKDIR /app
-RUN echo "Building HyE-YouTube-Proxy ..."
 RUN git clone https://github.com/rwth-acis/HyE-YouTube-Proxy.git
 WORKDIR /app/HyE-YouTube-Proxy
 RUN git checkout origin/no-playwright

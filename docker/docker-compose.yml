@@ -24,17 +24,17 @@ services:
       LAS2PEER_PORT: 9080
     depends_on:
       - ethereum
-  hye:
-    build: .
-    ports:
-      - 9081:9081/tcp
-      - 9081:9081/udp
-    environment:
-      LAS2PEER_ETH_HOST: ethereum:8545
-      LAS2PEER_PORT: 9081
-      BOOTSTRAP: las2peer:9080
-      EXTRA_ETH_WAIT: 120
-    depends_on:
-      - las2peer
+        #  hye:
+        #    build: .
+        #    ports:
+        #      - 9081:9081/tcp
+        #      - 9081:9081/udp
+        #    environment:
+        #      LAS2PEER_ETH_HOST: ethereum:8545
+        #      LAS2PEER_PORT: 9081
+        #      LAS2PEER_BOOTSTRAP: las2peer:9080
+        #      EXTRA_ETH_WAIT: 200
+        #    depends_on:
+        #      - las2peer
 volumes:
   ethereumStoragePersistent: {}

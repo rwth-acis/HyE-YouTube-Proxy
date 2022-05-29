@@ -708,6 +708,7 @@ public class IdentityManager {
      * @return Status code and appropriate message as JSON object
      */
     public boolean checkConsent(ExecutionContext context, Consent consentObj) {
+        return true;
         try {
             // Create signed consent object
             byte[] consentHash = getConsentHash(context, consentObj);
@@ -794,21 +795,21 @@ public class IdentityManager {
         }
 
         // Store consent to blockchain
-        try {
-            byte[] consentHash = getConsentHash(context, consentObj);
-            if (consentHash == null) {
-                response.addProperty("status", 500);
-                response.addProperty("msg", "Error creating consent hash");
-                return response;
-            }
-            log.info("Storing consent " + ParserUtil.bytesToHex(consentHash));
-            consentRegistry.storeConsent(consentHash).sendAsync().get();
-        } catch (Exception e) {
-            log.printStackTrace(e);
-            response.addProperty("status", 500);
-            response.addProperty("msg", "Error in blockchain communication.");
-            return response;
-        }
+        // try {
+        //     byte[] consentHash = getConsentHash(context, consentObj);
+        //     if (consentHash == null) {
+        //         response.addProperty("status", 500);
+        //         response.addProperty("msg", "Error creating consent hash");
+        //         return response;
+        //     }
+        //     log.info("Storing consent " + ParserUtil.bytesToHex(consentHash));
+        //     consentRegistry.storeConsent(consentHash).sendAsync().get();
+        // } catch (Exception e) {
+        //     log.printStackTrace(e);
+        //     response.addProperty("status", 500);
+        //     response.addProperty("msg", "Error in blockchain communication.");
+        //     return response;
+        // }
 
         // Store consent in las2peer
         try {

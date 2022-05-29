@@ -37,8 +37,8 @@ function truffleMigrate {
     cd /app/HyE-YouTube-Proxy/docker/registry-contracts
     ./node_modules/.bin/truffle migrate --network docker_boot 2>&1 | tee migration-hye.log
     echo done. Setting contract addresses in config file ...
-    # yeah, this isn't fun:
-    cat migration-hye.log | grep -A5 "\(Deploying\|Replacing\|contract address\) \'\(ConsentRegistry\)\'" | grep '\(Deploying\|Replacing\|contract address\)' | tr -d " '>:" | sed -e '$!N;s/\n//;s/Deploying//;s/Replacing//;s/contractaddress/Address = /;s/./\l&/' >> "${PROPS_DIR}${HYE_PROPS}"
+    # replaced regex, don't know if this always works...
+    CONSENT_REGISTRY=$(grep "contract address" migration-hye.log | grep -oE '0x.{40}$') && sed -i "s/consentRegistryAddress = .*/consentRegistryAddress = ${CONSENT_REGISTRY}/" ${PROPS_DIR}${HYE_PROPS}
     cp migration-hye.log /app/HyE-YouTube-Proxy/node-storage/migration-hye.log
     echo done.
  }
@@ -89,28 +89,23 @@ fi
 if [ -s "/app/HyE-YouTube-Proxy/node-storage/migration-hye.log" ]; then
     echo Found old migration-hye.log, importing...
     cat /app/HyE-YouTube-Proxy/node-storage/migration-hye.log
-    cat /app/HyE-YouTube-Proxy/node-storage/migration-hye.log | grep -A5 "\(Deploying\|Replacing\|contract address\) \'\(ConsentRegistry\)\'" | grep '\(Deploying\|Replacing\|contract address\)' | tr -d " '>:" | sed -e '$!N;s/\n//;s/Deploying//;s/Replacing//;s/contractaddress/Address = /;s/./\l&/' >> "${PROPS_DIR}${HYE_PROPS}"
+    CONSENT_REGISTRY=$(grep "contract address" migration-hye.log | grep -oE '0x.{40}$') && sed -i "s/consentRegistryAddress = .*/consentRegistryAddress = ${CONSENT_REGISTRY}/" ${PROPS_DIR}${HYE_PROPS}
     echo done.
 fi
 
-if [ -n "$LAS2PEER_BOOTSTRAP" ]; then
-    echo Skipping migration, contracts should already be deployed
-else
-    if [ -n "$LAS2PEER_ETH_HOST" ]; then
-        # echo Waiting for Ethereum client at $(host $LAS2PEER_ETH_HOST):$(port $LAS2PEER_ETH_HOST)...
-        # if waitForEndpoint $(host $LAS2PEER_ETH_HOST) $(port $LAS2PEER_ETH_HOST) 300; then
-            # echo Found Eth client.
-        if [ -s "/app/HyE-YouTube-Proxy/node-storage/migration-hye.log" ]; then
-            echo Migrated from logs.
-        else
-            # wait for seems broken somehow
-            truffleMigrate
-        fi
-        # else
-        #     echo Ethereum client not accessible. Aborting.
-        #     exit 2
-        # fi
+if [ -n "$LAS2PEER_ETH_HOST" ]; then
+    # echo Waiting for Ethereum client at $(host $LAS2PEER_ETH_HOST):$(port $LAS2PEER_ETH_HOST)...
+    # if waitForEndpoint $(host $LAS2PEER_ETH_HOST) $(port $LAS2PEER_ETH_HOST) 300; then
+        # echo Found Eth client.
+    if [ -s "/app/HyE-YouTube-Proxy/node-storage/migration-hye.log" ]; then
+        echo Migrated from logs.
+    else
+        # wait for seems broken somehow
+        truffleMigrate
     fi
+else
+    echo Ethereum client not accessible. Aborting.
+    exit 2
 fi
 
 echo Serving config files at :8001 ...
