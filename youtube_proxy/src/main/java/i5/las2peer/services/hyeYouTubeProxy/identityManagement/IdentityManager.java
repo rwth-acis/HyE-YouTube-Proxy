@@ -709,28 +709,28 @@ public class IdentityManager {
      */
     public boolean checkConsent(ExecutionContext context, Consent consentObj) {
         return true;
-        try {
-            // Create signed consent object
-            byte[] consentHash = getConsentHash(context, consentObj);
-            if (consentHash == null)
-                return false;
-            log.info("Checking for consent " + ParserUtil.bytesToHex(consentHash));
-            boolean result = consentRegistry.hashExists(consentHash).sendAsync().get();
-
-            // Consent for non-anonymous requests also entails consent for anonymous ones
-            if (!result && consentObj.getAnon()) {
-                consentHash = getConsentHash(context, consentObj.setAnon(false));
-                if (consentHash == null)
-                    return false;
-                log.info("Checking for consent " + ParserUtil.bytesToHex(consentHash));
-                return consentRegistry.hashExists(consentHash).sendAsync().get();
-            }
-            return result;
-        } catch (Exception e) {
-            log.severe("Error while checking consent.");
-            log.printStackTrace(e);
-            return false;
-        }
+//         try {
+//             // Create signed consent object
+//             byte[] consentHash = getConsentHash(context, consentObj);
+//             if (consentHash == null)
+//                 return false;
+//             log.info("Checking for consent " + ParserUtil.bytesToHex(consentHash));
+//             boolean result = consentRegistry.hashExists(consentHash).sendAsync().get();
+// 
+//             // Consent for non-anonymous requests also entails consent for anonymous ones
+//             if (!result && consentObj.getAnon()) {
+//                 consentHash = getConsentHash(context, consentObj.setAnon(false));
+//                 if (consentHash == null)
+//                     return false;
+//                 log.info("Checking for consent " + ParserUtil.bytesToHex(consentHash));
+//                 return consentRegistry.hashExists(consentHash).sendAsync().get();
+//             }
+//             return result;
+//         } catch (Exception e) {
+//             log.severe("Error while checking consent.");
+//             log.printStackTrace(e);
+//             return false;
+//         }
     }
 
     /**
