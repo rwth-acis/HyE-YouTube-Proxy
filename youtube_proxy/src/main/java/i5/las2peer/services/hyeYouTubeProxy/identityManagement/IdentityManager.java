@@ -860,25 +860,25 @@ public class IdentityManager {
             return response;
         }
 
-        // Trying to revoke non-existent consent seems to cause issues
-        if (checkConsent(context, consentObj)) {
-            // Revoke consent from blockchain
-            try {
-                byte[] consentHash = getConsentHash(context, consentObj);
-                if (consentHash == null) {
-                    response.addProperty("status", 500);
-                    response.addProperty("msg", "Error creating consent hash");
-                    return response;
-                }
-                log.info("Revoking consent " + ParserUtil.bytesToHex(consentHash));
-                consentRegistry.revokeConsent(consentHash).sendAsync().get();
-            } catch (Exception e) {
-                log.printStackTrace(e);
-                response.addProperty("status", 500);
-                response.addProperty("msg", "Error in blockchain communication.");
-                return response;
-            }
-        }
+//        // Trying to revoke non-existent consent seems to cause issues
+//        if (checkConsent(context, consentObj)) {
+//            // Revoke consent from blockchain
+//            try {
+//                byte[] consentHash = getConsentHash(context, consentObj);
+//                if (consentHash == null) {
+//                    response.addProperty("status", 500);
+//                    response.addProperty("msg", "Error creating consent hash");
+//                    return response;
+//                }
+//                log.info("Revoking consent " + ParserUtil.bytesToHex(consentHash));
+//                consentRegistry.revokeConsent(consentHash).sendAsync().get();
+//            } catch (Exception e) {
+//                log.printStackTrace(e);
+//                response.addProperty("status", 500);
+//                response.addProperty("msg", "Error in blockchain communication.");
+//                return response;
+//            }
+//        }
 
         // Revoke consent from las2peer
         try {
